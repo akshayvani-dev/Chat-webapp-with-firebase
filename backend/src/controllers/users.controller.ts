@@ -1,0 +1,49 @@
+import type { RequestHandler } from "express";
+import { AppError } from "../utils/AppError.js";
+import * as usersService from "../services/users.service.js";
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 100;
+
+function parsePositiveInteger(
+  value: unknown,
+  field: string,
+  defaultValue: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+): number {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  if (
+    typeof value !== "string" ||
+    !/^[1-9]\d*$/.test(value) ||
+    !Number.isSafeInteger(Number(value)) ||
+    Number(value) > maximum
+  ) {
+    throw new AppError(400, `Invalid ${field}`);
+  }
+
+  return Number(value);
+}
+
+export const list: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+
+    const page = parsePositiveInteger(req.query.page, "page", DEFAULT_PAGE);
+    const limit = parsePositiveInteger(
+      req.query.limit,
+      "limit",
+      DEFAULT_LIMIT,
+      MAX_LIMIT,
+    );
+    const result = await usersService.listUsers(req.user.id, { page, limit });
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
