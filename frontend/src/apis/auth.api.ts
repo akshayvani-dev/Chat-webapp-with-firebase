@@ -1,17 +1,28 @@
 import axiosInstance from "./axiosInstance";
 import type {
   AuthResponse,
+  FirebaseAuthResponse,
   SignInPayload,
   SignUpPayload,
 } from "../types/auth.types";
 
-export async function signUp(payload: SignUpPayload): Promise<AuthResponse> {
-  const response = await axiosInstance.post<AuthResponse>("/auth/signup", payload);
+export async function signUp(
+  payload: SignUpPayload,
+): Promise<FirebaseAuthResponse> {
+  const response = await axiosInstance.post<FirebaseAuthResponse>(
+    "/auth/signup",
+    payload,
+  );
   return response.data;
 }
 
-export async function signIn(payload: SignInPayload): Promise<AuthResponse> {
-  const response = await axiosInstance.post<AuthResponse>("/auth/signin", payload);
+export async function signIn(
+  payload: SignInPayload,
+): Promise<FirebaseAuthResponse> {
+  const response = await axiosInstance.post<FirebaseAuthResponse>(
+    "/auth/signin",
+    payload,
+  );
   return response.data;
 }
 

@@ -1,8 +1,19 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { getMe } from "../../apis/auth.api";
-import { clearUser, setAuthLoading, setUser } from "../../store/authSlice";
+import {
+  clearUser,
+  clearFirebaseUser,
+  setAuthLoading,
+  setFirebaseUser,
+  setUser,
+} from "../../store/authSlice";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import {
+  isFirebaseClientConfigured,
+  signOutFromFirebase,
+  subscribeToFirebaseAuth,
+} from "../../config/firebase";
 import {
   clearSessionFlag,
   hasSessionFlag,
@@ -38,6 +49,11 @@ export default function AuthSessionLayer({
     restoreStarted.current = true;
     if (!hasSessionFlag()) {
       dispatch(clearUser());
+      if (isFirebaseClientConfigured()) {
+        void signOutFromFirebase().catch((error: unknown) => {
+          console.error("Unable to clear the Firebase session", error);
+        });
+      }
       return;
     }
 
@@ -55,7 +71,37 @@ export default function AuthSessionLayer({
       .catch(() => {
         clearSessionFlag();
         dispatch(clearUser());
+        if (isFirebaseClientConfigured()) {
+          void signOutFromFirebase().catch((error: unknown) => {
+            console.error("Unable to clear the Firebase session", error);
+          });
+        }
       });
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (!isFirebaseClientConfigured()) {
+      return;
+    }
+
+    try {
+      return subscribeToFirebaseAuth(
+        (firebaseUser) => {
+          if (firebaseUser) {
+            dispatch(setFirebaseUser(firebaseUser));
+          } else {
+            dispatch(clearFirebaseUser());
+          }
+        },
+        (error) => {
+          dispatch(clearFirebaseUser());
+          console.error("Firebase authentication state listener failed", error);
+        },
+      );
+    } catch (error) {
+      console.error("Unable to initialize Firebase authentication", error);
+      return;
+    }
   }, [dispatch]);
 
   useEffect(() => {
@@ -65,6 +111,11 @@ export default function AuthSessionLayer({
         !hasSessionFlag()
       ) {
         dispatch(clearUser());
+        if (isFirebaseClientConfigured()) {
+          void signOutFromFirebase().catch((error: unknown) => {
+            console.error("Unable to clear the Firebase session", error);
+          });
+        }
         navigate("/signin", { replace: true });
       }
     };

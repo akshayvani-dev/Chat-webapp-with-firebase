@@ -20,3 +20,7 @@ export type User = {
 export type AuthResponse = {
   user: User;
 };
+
+export type FirebaseAuthResponse = AuthResponse & {
+  firebaseCustomToken: string;
+};

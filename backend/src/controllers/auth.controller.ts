@@ -7,7 +7,10 @@ export const signup: RequestHandler = async (req, res, next) => {
   try {
     const session = await authService.signup(req.body);
     setAuthCookies(res, session.accessToken, session.refreshToken);
-    res.status(201).json({ user: session.user });
+    res.status(201).json({
+      user: session.user,
+      firebaseCustomToken: session.firebaseCustomToken,
+    });
   } catch (error) {
     next(error);
   }
@@ -17,7 +20,10 @@ export const signin: RequestHandler = async (req, res, next) => {
   try {
     const session = await authService.signin(req.body);
     setAuthCookies(res, session.accessToken, session.refreshToken);
-    res.status(200).json({ user: session.user });
+    res.status(200).json({
+      user: session.user,
+      firebaseCustomToken: session.firebaseCustomToken,
+    });
   } catch (error) {
     next(error);
   }

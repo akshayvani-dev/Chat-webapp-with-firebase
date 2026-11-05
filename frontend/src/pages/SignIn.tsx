@@ -2,11 +2,15 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
-import { signIn } from "../apis/auth.api";
+import { logout, signIn } from "../apis/auth.api";
 import { getErrorMessage } from "../apis/axiosInstance";
+import {
+  signInWithFirebaseCustomToken,
+  type FirebaseClientUser,
+} from "../config/firebase";
 import { useAppDispatch } from "../store/hooks";
-import { setUser } from "../store/authSlice";
-import { setSessionFlag } from "../utils/sessionFlag";
+import { clearUser, setFirebaseUser, setUser } from "../store/authSlice";
+import { clearSessionFlag, setSessionFlag } from "../utils/sessionFlag";
 import {
   signInSchema,
   type SignInFormValues,
@@ -31,12 +35,38 @@ export default function SignIn() {
   const onSubmit = async (values: SignInFormValues) => {
     setServerError("");
     try {
-      const { user } = await signIn(values);
+      const { user, firebaseCustomToken } = await signIn(values);
+      let firebaseUser: FirebaseClientUser;
+      try {
+        firebaseUser = await signInWithFirebaseCustomToken(firebaseCustomToken);
+      } catch (error) {
+        console.error("Firebase sign-in failed after backend sign-in", error);
+        try {
+          await logout();
+        } catch (logoutError) {
+          console.error(
+            "Unable to clear the backend session after Firebase sign-in failed",
+            logoutError,
+          );
+        }
+        clearSessionFlag();
+        dispatch(clearUser());
+        throw new Error(
+          "Backend sign-in succeeded, but Firebase sign-in failed. Please try again.",
+          { cause: error },
+        );
+      }
       setSessionFlag();
       dispatch(setUser(user));
+      dispatch(setFirebaseUser(firebaseUser));
       navigate("/dashboard/chat_room");
     } catch (error) {
-      setServerError(getErrorMessage(error));
+      const message = getErrorMessage(error);
+      setServerError(
+        message === "Something went wrong" && error instanceof Error
+          ? error.message
+          : message,
+      );
     }
   };
 

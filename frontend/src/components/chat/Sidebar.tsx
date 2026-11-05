@@ -10,6 +10,7 @@ import ConfirmDialog from "../ui/ConfirmDialog";
 import { clearUser } from "../../store/authSlice";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { clearSessionFlag } from "../../utils/sessionFlag";
+import { signOutFromFirebase } from "../../config/firebase";
 import type { ListedUser } from "../../types/chat.types";
 import UserListItem from "./UserListItem";
 
@@ -74,9 +75,16 @@ export default function Sidebar({ className = "" }: SidebarProps) {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await logout();
-    } catch (error) {
-      console.error("Server logout failed; clearing the local session.", error);
+      try {
+        await signOutFromFirebase();
+      } catch (error) {
+        console.error("Firebase logout failed; clearing the local session.", error);
+      }
+      try {
+        await logout();
+      } catch (error) {
+        console.error("Server logout failed; clearing the local session.", error);
+      }
     } finally {
       clearSessionFlag();
       dispatch(clearUser());

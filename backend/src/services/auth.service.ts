@@ -5,6 +5,11 @@ import { prisma } from "../config/prisma.js";
 import type { AuthenticatedUser } from "../types/auth.js";
 import { AppError } from "../utils/AppError.js";
 import {
+  createFirebaseCustomToken,
+  deleteFirebaseUser,
+  ensureFirebaseUser,
+} from "./firebase-auth.service.js";
+import {
   refreshTokenMaxAgeMs,
   signAccessToken,
   signRefreshToken,
@@ -24,6 +29,10 @@ type AuthSession = {
   user: AuthenticatedUser;
   accessToken: string;
   refreshToken: string;
+};
+
+type FirebaseAuthSession = AuthSession & {
+  firebaseCustomToken: string;
 };
 
 function hashRefreshToken(token: string): string {
@@ -54,9 +63,11 @@ function isDuplicateEmailError(error: unknown): boolean {
   );
 }
 
-export async function signup(input: SignupInput): Promise<AuthSession> {
+export async function signup(input: SignupInput): Promise<FirebaseAuthSession> {
   const password = await bcrypt.hash(input.password, 12);
   const email = input.email.toLowerCase();
+  let firebaseUserCreated = false;
+  let firebaseUserId: string | null = null;
 
   try {
     return await prisma.$transaction(async (transaction) => {
@@ -64,6 +75,11 @@ export async function signup(input: SignupInput): Promise<AuthSession> {
         data: { name: input.name, email, password },
         select: publicUserSelect,
       });
+      firebaseUserCreated = await ensureFirebaseUser(user);
+      if (firebaseUserCreated) {
+        firebaseUserId = user.id;
+      }
+      const firebaseCustomToken = await createFirebaseCustomToken(user.id);
       const tokens = createTokenPair(user.id);
 
       await transaction.refreshToken.create({
@@ -74,9 +90,22 @@ export async function signup(input: SignupInput): Promise<AuthSession> {
         },
       });
 
-      return { user, ...tokens };
+      return { user, ...tokens, firebaseCustomToken };
     });
   } catch (error) {
+    if (firebaseUserCreated && firebaseUserId) {
+      try {
+        const existingUser = await prisma.user.findUnique({
+          where: { id: firebaseUserId },
+          select: { id: true },
+        });
+        if (!existingUser) {
+          await deleteFirebaseUser(firebaseUserId);
+        }
+      } catch {
+        console.error("Firebase signup compensation failed");
+      }
+    }
     if (isDuplicateEmailError(error)) {
       throw new AppError(409, "An account with this email already exists");
     }
@@ -84,7 +113,7 @@ export async function signup(input: SignupInput): Promise<AuthSession> {
   }
 }
 
-export async function signin(input: SigninInput): Promise<AuthSession> {
+export async function signin(input: SigninInput): Promise<FirebaseAuthSession> {
   const user = await prisma.user.findUnique({
     where: { email: input.email.toLowerCase() },
   });
@@ -93,11 +122,13 @@ export async function signin(input: SigninInput): Promise<AuthSession> {
     throw new AppError(401, "Invalid email or password");
   }
 
+  const { password: _password, ...publicUser } = user;
+  await ensureFirebaseUser(publicUser);
+  const firebaseCustomToken = await createFirebaseCustomToken(user.id);
   const tokens = createTokenPair(user.id);
   await storeRefreshToken(user.id, tokens.refreshToken);
 
-  const { password: _password, ...publicUser } = user;
-  return { user: publicUser, ...tokens };
+  return { user: publicUser, ...tokens, firebaseCustomToken };
 }
 
 export async function refresh(refreshToken: unknown): Promise<AuthSession> {
