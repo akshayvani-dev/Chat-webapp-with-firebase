@@ -34,7 +34,7 @@ export default function SignUp() {
       const { user } = await signUp(values);
       setSessionFlag();
       dispatch(setUser(user));
-      navigate("/dashboard");
+      navigate("/dashboard/chat_room");
     } catch (error) {
       setServerError(getErrorMessage(error));
     }

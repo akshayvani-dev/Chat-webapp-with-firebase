@@ -1,37 +1,80 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { logout } from "../../apis/auth.api";
+import { getUsers } from "../../apis/users.api";
+import ConfirmDialog from "../ui/ConfirmDialog";
+import { clearUser } from "../../store/authSlice";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import { clearSessionFlag } from "../../utils/sessionFlag";
 import type { DirectoryUser } from "../../types/chat.types";
 import UserListItem from "./UserListItem";
 
 type SidebarProps = {
-  currentUserName: string;
-  users: DirectoryUser[];
-  selectedUserId: string | null;
-  onSelectUser: (userId: string) => void;
-  onLogout: () => void;
-  isLoadingUsers: boolean;
-  usersError: string | null;
-  onRetryUsers: () => void;
-  currentPage: number;
-  totalPages: number;
-  totalUsers: number;
-  onPageChange: (page: number) => void;
   className?: string;
 };
 
-export default function Sidebar({
-  currentUserName,
-  users,
-  selectedUserId,
-  onSelectUser,
-  onLogout,
-  isLoadingUsers,
-  usersError,
-  onRetryUsers,
-  currentPage,
-  totalPages,
-  totalUsers,
-  onPageChange,
-  className = "",
-}: SidebarProps) {
+export default function Sidebar({ className = "" }: SidebarProps) {
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const { id: selectedUserId } = useParams();
+  const currentUserName = useAppSelector(
+    (state) => state.auth.user?.name ?? "Account",
+  );
+  const [users, setUsers] = useState<DirectoryUser[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [retryUsers, setRetryUsers] = useState(0);
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadUsers = async () => {
+      setIsLoadingUsers(true);
+      setUsersError(null);
+      try {
+        const result = await getUsers(currentPage);
+        if (!active) {
+          return;
+        }
+
+        setUsers(result.users);
+        setTotalPages(result.totalPages);
+        setTotalUsers(result.total);
+      } catch {
+        if (active) {
+          setUsersError("Unable to load users.");
+        }
+      } finally {
+        if (active) {
+          setIsLoadingUsers(false);
+        }
+      }
+    };
+
+    void loadUsers();
+    return () => {
+      active = false;
+    };
+  }, [currentPage, retryUsers]);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Server logout failed; clearing the local session.", error);
+    } finally {
+      clearSessionFlag();
+      dispatch(clearUser());
+      navigate("/signin", { replace: true });
+    }
+  };
+
   return (
     <aside
       className={`flex h-full min-h-0 flex-col border-r border-stone-200 bg-white ${className}`}
@@ -49,7 +92,7 @@ export default function Sidebar({
         <button
           className="shrink-0 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40"
           type="button"
-          onClick={onLogout}
+          onClick={() => setIsLogoutDialogOpen(true)}
         >
           Logout
         </button>
@@ -73,7 +116,7 @@ export default function Sidebar({
             <button
               className="mt-2 text-sm font-semibold text-emerald-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40"
               type="button"
-              onClick={onRetryUsers}
+              onClick={() => setRetryUsers((retryCount) => retryCount + 1)}
             >
               Try again
             </button>
@@ -88,7 +131,9 @@ export default function Sidebar({
               key={user.id}
               user={user}
               isSelected={user.id === selectedUserId}
-              onSelect={onSelectUser}
+              onSelect={(userId) =>
+                navigate(`/dashboard/chat_room/${encodeURIComponent(userId)}`)
+              }
             />
           ))
         )}
@@ -103,7 +148,7 @@ export default function Sidebar({
               className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={isLoadingUsers || currentPage <= 1}
-              onClick={() => onPageChange(currentPage - 1)}
+              onClick={() => setCurrentPage((page) => page - 1)}
             >
               Previous
             </button>
@@ -111,13 +156,23 @@ export default function Sidebar({
               className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={isLoadingUsers || currentPage >= totalPages}
-              onClick={() => onPageChange(currentPage + 1)}
+              onClick={() => setCurrentPage((page) => page + 1)}
             >
               Next
             </button>
           </div>
         </footer>
       )}
+      <ConfirmDialog
+        open={isLogoutDialogOpen}
+        onOpenChange={setIsLogoutDialogOpen}
+        title="Log out"
+        description="Are you sure you want to log out?"
+        confirmLabel="Log out"
+        onConfirm={handleLogout}
+        isLoading={isLoggingOut}
+        variant="danger"
+      />
     </aside>
   );
 }

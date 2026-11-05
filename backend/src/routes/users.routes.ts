@@ -5,5 +5,6 @@ import { authenticate } from "../middlewares/authenticate.js";
 const router = Router();
 
 router.get("/", authenticate, usersController.list);
+router.get("/:id", authenticate, usersController.getById);
 
 export default router;

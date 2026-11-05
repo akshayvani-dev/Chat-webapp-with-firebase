@@ -9,6 +9,10 @@ type UsersResponse = {
   totalPages: number;
 };
 
+type UserResponse = {
+  user: DirectoryUser;
+};
+
 export async function getUsers(
   page: number,
   limit = 10,
@@ -17,4 +21,11 @@ export async function getUsers(
     params: { page, limit },
   });
   return response.data;
+}
+
+export async function getUserById(id: string): Promise<DirectoryUser> {
+  const response = await axiosInstance.get<UserResponse>(
+    `/users/${encodeURIComponent(id)}`,
+  );
+  return response.data.user;
 }

@@ -47,3 +47,25 @@ export const list: RequestHandler = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getById: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+
+    const userId = req.params.id;
+    if (typeof userId !== "string" || userId.length === 0) {
+      throw new AppError(400, "Invalid user ID");
+    }
+
+    const user = await usersService.getUserById(userId);
+    if (!user || user.id === req.user.id) {
+      throw new AppError(404, "User not found");
+    }
+
+    res.status(200).json({ user });
+  } catch (error) {
+    next(error);
+  }
+};

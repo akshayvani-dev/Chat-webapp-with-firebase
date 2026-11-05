@@ -1,81 +1,100 @@
-import { useEffect, useRef } from "react";
-import type { ChatMessage, DirectoryUser } from "../../types/chat.types";
-import MessageBubble from "./MessageBubble";
-import MessageComposer from "./MessageComposer";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { getErrorMessage } from "../../apis/axiosInstance";
+import { getUserById } from "../../apis/users.api";
+import type { DirectoryUser } from "../../types/chat.types";
 
-type ChatPanelProps = {
-  currentUserId: string;
-  selectedUser: DirectoryUser | null;
-  messages: ChatMessage[];
-  onSendMessage: (text: string) => void;
-  onBack: () => void;
-  className?: string;
-};
-
-export default function ChatPanel({
-  currentUserId,
-  selectedUser,
-  messages,
-  onSendMessage,
-  onBack,
-  className = "",
-}: ChatPanelProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+export default function ChatPanel() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [user, setUser] = useState<DirectoryUser | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, selectedUser?.id]);
+    let active = true;
 
-  if (!selectedUser) {
+    if (!id) {
+      setUser(null);
+      setError(null);
+      setIsLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    const loadUser = async () => {
+      setUser(null);
+      setError(null);
+      setIsLoading(true);
+      try {
+        const result = await getUserById(id);
+        if (active) {
+          setUser(result);
+        }
+      } catch (requestError) {
+        if (active) {
+          setError(getErrorMessage(requestError));
+        }
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadUser();
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (!id) {
     return (
       <section
-        className={`flex min-h-0 flex-1 items-center justify-center bg-stone-50 px-6 text-center ${className}`}
+        className="flex min-h-0 flex-1 items-center justify-center bg-stone-50 px-6 text-center"
         aria-label="Conversation"
       >
-        <p className="text-sm text-stone-500">Select a user to start chatting</p>
+        <p className="text-sm text-stone-500">
+          Select chat to view chat history
+        </p>
       </section>
     );
   }
 
   return (
     <section
-      className={`flex min-h-0 flex-1 flex-col bg-stone-50 ${className}`}
-      aria-label={`Conversation with ${selectedUser.name}`}
+      className="flex min-h-0 flex-1 flex-col bg-stone-50"
+      aria-label={user ? `Conversation with ${user.name}` : "Conversation"}
     >
       <header className="flex h-[73px] shrink-0 items-center gap-3 border-b border-stone-200 bg-white px-4 sm:px-6">
         <button
           className="rounded-lg px-2 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 md:hidden"
           type="button"
-          onClick={onBack}
+          onClick={() => navigate("/dashboard/chat_room")}
           aria-label="Back to users"
         >
           Back
         </button>
         <h2 className="truncate text-base font-semibold text-stone-900">
-          {selectedUser.name}
+          {isLoading ? "Loading user..." : user?.name ?? "User"}
         </h2>
       </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4">
-          {messages.length === 0 ? (
-            <p className="py-8 text-center text-sm text-stone-500">
-              No messages yet. Send a message to start.
-            </p>
-          ) : (
-            messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                isMine={message.senderId === currentUserId}
-              />
-            ))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
+        {isLoading ? (
+          <p className="text-sm text-stone-500" role="status">
+            Loading user...
+          </p>
+        ) : error ? (
+          <p className="text-sm text-red-700" role="alert">
+            {error}
+          </p>
+        ) : (
+          <p className="text-sm text-stone-500">
+            Chat history is not available yet.
+          </p>
+        )}
       </div>
-
-      <MessageComposer onSend={onSendMessage} />
     </section>
   );
 }

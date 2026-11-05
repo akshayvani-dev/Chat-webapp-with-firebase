@@ -30,6 +30,13 @@ export async function listUsers(
   };
 }
 
+export async function getUserById(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: publicUserSelect,
+  });
+}
+
 const publicUserSelect = {
   id: true,
   name: true,
