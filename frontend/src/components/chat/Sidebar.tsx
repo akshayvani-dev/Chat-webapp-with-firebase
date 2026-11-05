@@ -1,12 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { logout } from "../../apis/auth.api";
-import { getUsers } from "../../apis/users.api";
+import {
+  getUsers,
+  initiateConversation,
+} from "../../apis/users.api";
+import { getErrorMessage } from "../../apis/axiosInstance";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { clearUser } from "../../store/authSlice";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { clearSessionFlag } from "../../utils/sessionFlag";
-import type { DirectoryUser } from "../../types/chat.types";
+import type { ListedUser } from "../../types/chat.types";
 import UserListItem from "./UserListItem";
 
 type SidebarProps = {
@@ -20,13 +24,18 @@ export default function Sidebar({ className = "" }: SidebarProps) {
   const currentUserName = useAppSelector(
     (state) => state.auth.user?.name ?? "Account",
   );
-  const [users, setUsers] = useState<DirectoryUser[]>([]);
+  const [users, setUsers] = useState<ListedUser[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [totalUsers, setTotalUsers] = useState(0);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [retryUsers, setRetryUsers] = useState(0);
+  const initiatingUserIdsRef = useRef(new Set<string>());
+  const [initiatingUserIds, setInitiatingUserIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [initiationError, setInitiationError] = useState<string | null>(null);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -72,6 +81,50 @@ export default function Sidebar({ className = "" }: SidebarProps) {
       clearSessionFlag();
       dispatch(clearUser());
       navigate("/signin", { replace: true });
+    }
+  };
+
+  const handleSelectUser = async (user: ListedUser) => {
+    if (initiatingUserIdsRef.current.has(user.id)) {
+      return;
+    }
+
+    setInitiationError(null);
+    if (user.chatInitiated) {
+      if (!user.conversationId) {
+        setInitiationError("This conversation could not be opened.");
+        return;
+      }
+
+      navigate(`/dashboard/chat_room/${encodeURIComponent(user.id)}`);
+      return;
+    }
+
+    initiatingUserIdsRef.current.add(user.id);
+    setInitiatingUserIds((current) => new Set(current).add(user.id));
+    try {
+      const result = await initiateConversation(user.id);
+      setUsers((currentUsers) =>
+        currentUsers.map((currentUser) =>
+          currentUser.id === user.id
+            ? {
+                ...currentUser,
+                chatInitiated: result.chatInitiated,
+                conversationId: result.conversationId,
+              }
+            : currentUser,
+        ),
+      );
+      navigate(`/dashboard/chat_room/${encodeURIComponent(user.id)}`);
+    } catch (error) {
+      setInitiationError(getErrorMessage(error));
+    } finally {
+      initiatingUserIdsRef.current.delete(user.id);
+      setInitiatingUserIds((current) => {
+        const next = new Set(current);
+        next.delete(user.id);
+        return next;
+      });
     }
   };
 
@@ -126,16 +179,22 @@ export default function Sidebar({ className = "" }: SidebarProps) {
             No other users found.
           </p>
         ) : (
-          users.map((user) => (
-            <UserListItem
-              key={user.id}
-              user={user}
-              isSelected={user.id === selectedUserId}
-              onSelect={(userId) =>
-                navigate(`/dashboard/chat_room/${encodeURIComponent(userId)}`)
-              }
-            />
-          ))
+          <>
+            {initiationError && (
+              <p className="px-4 py-3 text-sm text-red-700" role="alert">
+                {initiationError}
+              </p>
+            )}
+            {users.map((user) => (
+              <UserListItem
+                key={user.id}
+                user={user}
+                isSelected={user.id === selectedUserId}
+                isLoading={initiatingUserIds.has(user.id)}
+                onSelect={() => void handleSelectUser(user)}
+              />
+            ))}
+          </>
         )}
       </nav>
       {totalPages > 0 && (

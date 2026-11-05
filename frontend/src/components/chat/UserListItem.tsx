@@ -1,14 +1,16 @@
-import type { DirectoryUser } from "../../types/chat.types";
+import type { ListedUser } from "../../types/chat.types";
 
 type UserListItemProps = {
-  user: DirectoryUser;
+  user: ListedUser;
   isSelected: boolean;
-  onSelect: (userId: string) => void;
+  isLoading: boolean;
+  onSelect: () => void;
 };
 
 export default function UserListItem({
   user,
   isSelected,
+  isLoading,
   onSelect,
 }: UserListItemProps) {
   return (
@@ -20,10 +22,11 @@ export default function UserListItem({
       }`}
       type="button"
       aria-pressed={isSelected}
-      onClick={() => onSelect(user.id)}
+      disabled={isLoading}
+      onClick={onSelect}
     >
       <span className="block truncate text-sm font-semibold text-stone-900">
-        {user.name}
+        {isLoading ? "Starting chat..." : user.name}
       </span>
     </button>
   );

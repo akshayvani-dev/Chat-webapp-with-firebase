@@ -1,8 +1,8 @@
 import axiosInstance from "./axiosInstance";
-import type { DirectoryUser } from "../types/chat.types";
+import type { DirectoryUser, ListedUser } from "../types/chat.types";
 
 type UsersResponse = {
-  users: DirectoryUser[];
+  users: ListedUser[];
   total: number;
   page: number;
   limit: number;
@@ -11,6 +11,11 @@ type UsersResponse = {
 
 type UserResponse = {
   user: DirectoryUser;
+};
+
+export type InitiateConversationResponse = {
+  conversationId: string;
+  chatInitiated: true;
 };
 
 export async function getUsers(
@@ -28,4 +33,13 @@ export async function getUserById(id: string): Promise<DirectoryUser> {
     `/users/${encodeURIComponent(id)}`,
   );
   return response.data.user;
+}
+
+export async function initiateConversation(
+  userId: string,
+): Promise<InitiateConversationResponse> {
+  const response = await axiosInstance.post<InitiateConversationResponse>(
+    `/users/${encodeURIComponent(userId)}/conversation`,
+  );
+  return response.data;
 }
