@@ -1,6 +1,7 @@
 import { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../config/prisma.js";
 import { AppError } from "../utils/AppError.js";
+import { syncFirestoreConversation } from "./firebase-chat.service.js";
 
 export type ListUsersOptions = {
   page: number;
@@ -47,11 +48,41 @@ export async function listUsers(
   };
 }
 
-export async function getUserById(userId: string) {
-  return prisma.user.findUnique({
+export async function getUserById(userId: string, authenticatedUserId: string) {
+  const user = await prisma.user.findUnique({
     where: { id: userId },
     select: publicUserSelect,
   });
+
+  if (!user) {
+    return null;
+  }
+
+  const conversation = await prisma.conversation.findFirst({
+    where: {
+      participants: { hasEvery: [userId, authenticatedUserId] },
+    },
+    select: { id: true, participants: true },
+  });
+
+  const validConversation =
+    conversation?.participants.length === 2 &&
+    conversation.participants.includes(userId) &&
+    conversation.participants.includes(authenticatedUserId)
+      ? conversation
+      : null;
+
+  if (validConversation) {
+    await syncFirestoreConversation(
+      validConversation.id,
+      validConversation.participants,
+    );
+  }
+
+  return {
+    ...user,
+    conversationId: validConversation?.id ?? null,
+  };
 }
 
 const uuidPattern =
@@ -69,7 +100,7 @@ export async function initiateConversation(
     throw new AppError(400, "Cannot start a conversation with yourself");
   }
 
-  return prisma.$transaction(async (transaction) => {
+  const conversation = await prisma.$transaction(async (transaction) => {
     const [authenticatedUser, selectedUser] = await Promise.all([
       transaction.user.findUnique({
         where: { id: authenticatedUserId },
@@ -107,9 +138,19 @@ export async function initiateConversation(
 
     return {
       conversationId: conversation.conversationId,
-      chatInitiated: true,
+      participantIds: [authenticatedUser.id, selectedUser.id],
     };
   });
+
+  await syncFirestoreConversation(
+    conversation.conversationId,
+    conversation.participantIds,
+  );
+
+  return {
+    conversationId: conversation.conversationId,
+    chatInitiated: true,
+  };
 }
 
 const publicUserSelect = {

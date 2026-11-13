@@ -1,23 +1,45 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getErrorMessage } from "../../apis/axiosInstance";
-import { getUserById } from "../../apis/users.api";
-import type { DirectoryUser } from "../../types/chat.types";
+import { getUserById, sendMessage } from "../../apis/users.api";
+import { subscribeToConversationMessages } from "../../config/firebase-chat";
+import { useAppSelector } from "../../store/hooks";
+import type {
+  ConversationMessage,
+  DirectoryUser,
+} from "../../types/chat.types";
+
+function getErrorText(error: unknown): string {
+  const apiMessage = getErrorMessage(error);
+  if (apiMessage !== "Something went wrong") {
+    return apiMessage;
+  }
+  return error instanceof Error ? error.message : apiMessage;
+}
 
 export default function ChatPanel() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const currentUserId = useAppSelector((state) => state.auth.user?.id ?? null);
+  const firebaseUser = useAppSelector((state) => state.auth.firebaseUser);
   const [user, setUser] = useState<DirectoryUser | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(false);
+  const [userError, setUserError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [messageError, setMessageError] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const sendingRef = useRef(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
 
     if (!id) {
       setUser(null);
-      setError(null);
-      setIsLoading(false);
+      setUserError(null);
+      setIsLoadingUser(false);
       return () => {
         active = false;
       };
@@ -25,8 +47,12 @@ export default function ChatPanel() {
 
     const loadUser = async () => {
       setUser(null);
-      setError(null);
-      setIsLoading(true);
+      setUserError(null);
+      setIsLoadingUser(true);
+      setMessages([]);
+      setMessageError(null);
+      setDraft("");
+
       try {
         const result = await getUserById(id);
         if (active) {
@@ -34,11 +60,11 @@ export default function ChatPanel() {
         }
       } catch (requestError) {
         if (active) {
-          setError(getErrorMessage(requestError));
+          setUserError(getErrorText(requestError));
         }
       } finally {
         if (active) {
-          setIsLoading(false);
+          setIsLoadingUser(false);
         }
       }
     };
@@ -48,6 +74,97 @@ export default function ChatPanel() {
       active = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !user || user.id !== id || isLoadingUser) {
+      setMessages([]);
+      setIsLoadingMessages(false);
+      setMessageError(null);
+      return;
+    }
+
+    if (userError) {
+      setIsLoadingMessages(false);
+      return;
+    }
+
+    if (!user.conversationId) {
+      setMessages([]);
+      setIsLoadingMessages(false);
+      setMessageError(null);
+      return;
+    }
+
+    if (!currentUserId || !firebaseUser) {
+      setIsLoadingMessages(true);
+      setMessageError(null);
+      return;
+    }
+
+    if (firebaseUser.uid !== currentUserId) {
+      setMessages([]);
+      setIsLoadingMessages(false);
+      setMessageError("Firebase session does not match the signed-in account.");
+      return;
+    }
+
+    setIsLoadingMessages(true);
+    setMessageError(null);
+    const unsubscribe = subscribeToConversationMessages(
+      user.conversationId,
+      currentUserId,
+      (nextMessages) => {
+        setMessages(nextMessages);
+        setIsLoadingMessages(false);
+        setMessageError(null);
+      },
+      (error) => {
+        setIsLoadingMessages(false);
+        setMessageError(error.message);
+      },
+    );
+
+    return unsubscribe;
+  }, [
+    currentUserId,
+    firebaseUser,
+    id,
+    isLoadingUser,
+    user,
+    userError,
+  ]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSendMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = draft.trim();
+    const conversationId = user?.conversationId;
+    if (
+      !text ||
+      !conversationId ||
+      !currentUserId ||
+      firebaseUser?.uid !== currentUserId ||
+      sendingRef.current
+    ) {
+      return;
+    }
+
+    sendingRef.current = true;
+    setIsSending(true);
+    setMessageError(null);
+    try {
+      await sendMessage(conversationId, text);
+      setDraft("");
+    } catch (error) {
+      setMessageError(getErrorText(error));
+    } finally {
+      sendingRef.current = false;
+      setIsSending(false);
+    }
+  };
 
   if (!id) {
     return (
@@ -61,6 +178,12 @@ export default function ChatPanel() {
       </section>
     );
   }
+
+  const conversationReady = Boolean(
+    user?.conversationId &&
+      currentUserId &&
+      firebaseUser?.uid === currentUserId,
+  );
 
   return (
     <section
@@ -77,24 +200,103 @@ export default function ChatPanel() {
           Back
         </button>
         <h2 className="truncate text-base font-semibold text-stone-900">
-          {isLoading ? "Loading user..." : user?.name ?? "User"}
+          {isLoadingUser ? "Loading user..." : user?.name ?? "User"}
         </h2>
       </header>
-      <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-        {isLoading ? (
-          <p className="text-sm text-stone-500" role="status">
-            Loading user...
+
+      <div
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-5 sm:px-6"
+        role="log"
+        aria-label="Messages"
+        aria-live="polite"
+        aria-relevant="additions text"
+      >
+        {isLoadingUser || isLoadingMessages ? (
+          <p className="m-auto text-sm text-stone-500" role="status">
+            {isLoadingUser ? "Loading conversation..." : "Loading messages..."}
           </p>
-        ) : error ? (
-          <p className="text-sm text-red-700" role="alert">
-            {error}
+        ) : userError ? (
+          <p className="m-auto text-sm text-red-700" role="alert">
+            {userError}
+          </p>
+        ) : !user?.conversationId ? (
+          <p className="m-auto text-center text-sm text-stone-500">
+            Select this user from the sidebar to start a conversation.
+          </p>
+        ) : messageError && messages.length === 0 ? (
+          <p className="m-auto text-sm text-red-700" role="alert">
+            {messageError}
+          </p>
+        ) : messages.length === 0 ? (
+          <p className="m-auto text-sm text-stone-500">
+            No messages yet. Send the first message.
           </p>
         ) : (
-          <p className="text-sm text-stone-500">
-            Chat history is not available yet.
+          messages.map((message) => {
+            const isOwnMessage = message.senderId === currentUserId;
+            return (
+              <article
+                key={message.id}
+                className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm ${
+                    isOwnMessage
+                      ? "bg-emerald-900 text-white"
+                      : "bg-white text-stone-800 shadow-sm"
+                  }`}
+                >
+                  <p>{message.text}</p>
+                  <time
+                    className={`mt-1 block text-right text-[11px] ${
+                      isOwnMessage ? "text-emerald-100" : "text-stone-400"
+                    }`}
+                    dateTime={message.createdAt}
+                  >
+                    {new Date(message.createdAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </time>
+                </div>
+              </article>
+            );
+          })
+        )}
+        {messageError && messages.length > 0 && (
+          <p className="text-center text-sm text-red-700" role="alert">
+            {messageError}
           </p>
         )}
+        <div ref={messagesEndRef} />
       </div>
+
+      <form
+        className="flex shrink-0 items-end gap-3 border-t border-stone-200 bg-white p-4 sm:px-6"
+        onSubmit={handleSendMessage}
+      >
+        <label className="sr-only" htmlFor="chat-message">
+          Message
+        </label>
+        <textarea
+          id="chat-message"
+          className="max-h-32 min-h-11 flex-1 resize-y rounded-xl border border-stone-200 px-4 py-3 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-emerald-700 focus:ring-4 focus:ring-emerald-700/10 disabled:bg-stone-100"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={
+            conversationReady ? "Write a message..." : "Select a conversation"
+          }
+          maxLength={4000}
+          disabled={!conversationReady || isSending}
+        />
+        <button
+          className="shrink-0 rounded-xl bg-emerald-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-700/25 disabled:cursor-not-allowed disabled:bg-stone-300"
+          type="submit"
+          disabled={!conversationReady || !draft.trim() || isSending}
+        >
+          {isSending ? "Sending..." : "Send"}
+        </button>
+      </form>
     </section>
   );
 }

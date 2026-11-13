@@ -59,7 +59,7 @@ export const getById: RequestHandler = async (req, res, next) => {
       throw new AppError(400, "Invalid user ID");
     }
 
-    const user = await usersService.getUserById(userId);
+    const user = await usersService.getUserById(userId, req.user.id);
     if (!user || user.id === req.user.id) {
       throw new AppError(404, "User not found");
     }

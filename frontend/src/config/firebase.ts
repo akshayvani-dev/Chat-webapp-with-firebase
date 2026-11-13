@@ -39,7 +39,7 @@ function toFirebaseClientUser(user: User): FirebaseClientUser {
   };
 }
 
-function getFirebaseAuth() {
+export function getFirebaseApp() {
   const config = getFirebaseConfig();
   if (!isFirebaseClientConfigured()) {
     throw new Error(
@@ -47,10 +47,24 @@ function getFirebaseAuth() {
     );
   }
 
-  const app =
+  return (
     getApps().find((existingApp) => existingApp.name === "frontend-auth") ??
-    initializeApp(config, "frontend-auth");
-  return getAuth(app);
+    initializeApp(config, "frontend-auth")
+  );
+}
+
+function getFirebaseAuth() {
+  return getAuth(getFirebaseApp());
+}
+
+export async function verifyCurrentFirebaseUser(
+  expectedUid: string,
+): Promise<void> {
+  const auth = getFirebaseAuth();
+  await auth.authStateReady();
+  if (!auth.currentUser || auth.currentUser.uid !== expectedUid) {
+    throw new Error("Firebase user does not match the signed-in account");
+  }
 }
 
 export async function signInWithFirebaseCustomToken(
