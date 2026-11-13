@@ -43,7 +43,7 @@ export async function initiateConversation(
   userId: string,
 ): Promise<InitiateConversationResponse> {
   const response = await axiosInstance.post<InitiateConversationResponse>(
-    `/users/${encodeURIComponent(userId)}/conversation`,
+    `/conversations/${encodeURIComponent(userId)}`,
   );
   return response.data;
 }
