@@ -265,7 +265,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
       className={`flex h-full min-h-0 flex-col border-r border-frosted-blue/70 bg-white ${className}`}
       aria-label="Chats"
     >
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-frosted-blue/70 bg-white/80 px-5 py-4">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-frosted-blue/70 bg-white/80 px-5 py-3.5">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-deep-twilight text-lg font-semibold text-white shadow-sm">
             {currentUserName.slice(0, 1).toUpperCase()}

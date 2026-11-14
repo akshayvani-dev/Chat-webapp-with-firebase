@@ -1,11 +1,19 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
 } from "react";
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import {
+  Check,
+  LoaderCircle,
+  Pencil,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getErrorMessage } from "../../apis/axiosInstance";
 import {
@@ -53,6 +61,21 @@ export default function ChatPanel() {
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
   const sendingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const textarea = messageInputRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const maxHeight = 160;
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [draft]);
 
   const updateRecentPreview = useCallback(
     (message: ConversationMessage | null) => {
@@ -449,41 +472,56 @@ export default function ChatPanel() {
       </div>
 
       <form
-        className="flex shrink-0 items-end gap-3 border-t border-frosted-blue bg-white p-4 sm:px-6"
+        className="flex shrink-0 items-end gap-3 p-3 sm:px-6 sm:py-4"
         onSubmit={handleSendMessage}
       >
         <label className="sr-only" htmlFor="chat-message">
           Message
         </label>
-        <textarea
-          id="chat-message"
-          className="max-h-32 min-h-11 flex-1 resize-y rounded-xl border border-frosted-blue px-4 py-3 text-sm text-deep-twilight outline-none placeholder:text-bright-teal-blue focus:border-bright-teal-blue focus:ring-4 focus:ring-bright-teal-blue/10 disabled:bg-light-cyan"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          placeholder={
+        <div
+          className={`flex min-h-12 min-w-0 flex-1 items-end rounded-[1.6rem] border bg-light-cyan/70 px-4 py-1.5 transition-colors focus-within:border-bright-teal-blue focus-within:bg-white focus-within:ring-4 focus-within:ring-bright-teal-blue/10 ${
             conversationReady
-              ? "Write a message... (Shift+Enter for a new line)"
-              : "Select a conversation"
-          }
-          maxLength={4000}
-          disabled={!conversationReady || isSending}
-        />
-        <button
-          className="shrink-0 rounded-xl bg-deep-twilight px-4 py-3 text-sm font-semibold text-white transition hover:bg-bright-teal-blue focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-bright-teal-blue/25 disabled:cursor-not-allowed disabled:bg-frosted-blue"
-          type="submit"
-          disabled={!conversationReady || !draft.trim() || isSending}
+              ? "border-frosted-blue"
+              : "border-frosted-blue/60 opacity-70"
+          }`}
         >
-          {isSending ? "Sending..." : "Send"}
+          <textarea
+            ref={messageInputRef}
+            id="chat-message"
+            className="min-h-9 w-full resize-none self-center bg-transparent py-2 text-sm leading-5 text-deep-twilight outline-none transition-[height] duration-150 ease-out placeholder:text-bright-teal-blue/70 disabled:cursor-not-allowed"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder={
+              conversationReady ? "Type a message..." : "Select a conversation"
+            }
+            maxLength={4000}
+            disabled={!conversationReady}
+            rows={1}
+          />
+        </div>
+        <button
+          className="flex size-12 shrink-0 cursor-pointer items-center justify-center rounded-full bg-deep-twilight text-white shadow-md transition duration-150 hover:scale-105 hover:bg-bright-teal-blue focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-bright-teal-blue/25 disabled:cursor-not-allowed disabled:bg-frosted-blue disabled:shadow-none"
+          type="submit"
+          aria-label={isSending ? "Sending message" : "Send message"}
+          title={isSending ? "Sending..." : "Send message"}
+          disabled={!conversationReady || !draft.trim() || isSending}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          {isSending ? (
+            <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Send className="size-5" aria-hidden="true" />
+          )}
         </button>
       </form>
       <ConfirmDialog
