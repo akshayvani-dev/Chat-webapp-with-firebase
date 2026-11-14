@@ -12,6 +12,7 @@ import { getRecentConversations } from "../../apis/conversations.api";
 import { subscribeToLatestConversationMessage } from "../../config/firebase-chat";
 import { useAppSelector } from "../../store/hooks";
 import type { RecentConversation } from "../../types/chat.types";
+import chatSoundSrc from "../../assets/chat_sound.mp3";
 
 export type SidebarTab = "users" | "recent";
 
@@ -30,46 +31,13 @@ type RecentConversationsProviderProps = {
   activeConversationUserId?: string;
 };
 
-let notificationAudioContext: AudioContext | null = null;
-
-function prepareNotificationAudio(): void {
-  if (!notificationAudioContext && typeof window !== "undefined") {
-    const AudioContextConstructor =
-      window.AudioContext ??
-      (window as Window & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (AudioContextConstructor) {
-      notificationAudioContext = new AudioContextConstructor();
-    }
-  }
-
-  if (notificationAudioContext?.state === "suspended") {
-    void notificationAudioContext.resume().catch((error: unknown) => {
-      console.warn("Unable to enable message notification sound", error);
-    });
-  }
-}
+const chatSound = new Audio(chatSoundSrc);
 
 function playIncomingMessageSound(): void {
-  const context = notificationAudioContext;
-  if (!context || context.state !== "running") {
-    return;
-  }
-
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  const now = context.currentTime;
-
-  oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(740, now);
-  oscillator.frequency.setValueAtTime(880, now + 0.08);
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.12, now + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start(now);
-  oscillator.stop(now + 0.18);
+  chatSound.currentTime = 0;
+  void chatSound.play().catch((error: unknown) => {
+    console.warn("Unable to play message notification sound", error);
+  });
 }
 
 export function RecentConversationsProvider({
@@ -86,16 +54,6 @@ export function RecentConversationsProvider({
   const subscriptionsRef = useRef(new Map<string, () => void>());
   const activeConversationUserIdRef = useRef(activeConversationUserId);
   activeConversationUserIdRef.current = activeConversationUserId;
-
-  useEffect(() => {
-    const unlockAudio = () => prepareNotificationAudio();
-    window.addEventListener("pointerdown", unlockAudio);
-    window.addEventListener("keydown", unlockAudio);
-    return () => {
-      window.removeEventListener("pointerdown", unlockAudio);
-      window.removeEventListener("keydown", unlockAudio);
-    };
-  }, []);
 
   const updateRecentConversation = useCallback(
     (conversation: RecentConversation) => {
