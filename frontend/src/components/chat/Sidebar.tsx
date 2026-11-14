@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { LogOut, MessageCircle, UsersRound } from "lucide-react";
 import { logout } from "../../apis/auth.api";
@@ -20,8 +20,6 @@ import UserListItem from "./UserListItem";
 type SidebarProps = {
   className?: string;
 };
-
-const RECENT_PAGE_SIZE = 10;
 
 function mergeRecentConversations(
   current: RecentConversation[],
@@ -65,8 +63,7 @@ function mergeRecentConversations(
         ? Date.parse(right.lastMessageAt)
         : Number.NEGATIVE_INFINITY;
       return rightTime - leftTime;
-    })
-    .slice(0, RECENT_PAGE_SIZE);
+    });
 
   if (
     merged.length === current.length &&
@@ -95,21 +92,29 @@ export default function Sidebar({ className = "" }: SidebarProps) {
   const recentConversationUpdatesRef = useRef(recentConversationUpdates);
   recentConversationUpdatesRef.current = recentConversationUpdates;
   const [users, setUsers] = useState<ListedUser[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalUsers, setTotalUsers] = useState(0);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [hasMoreUsers, setHasMoreUsers] = useState(true);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
-  const [retryUsers, setRetryUsers] = useState(0);
+  const currentPageRef = useRef(0);
+  const totalPagesRef = useRef(0);
+  const hasMoreUsersRef = useRef(true);
+  const isLoadingUsersRef = useRef(false);
+  const usersStartedRef = useRef(false);
   const [recentConversations, setRecentConversations] = useState<
     RecentConversation[]
   >([]);
-  const [recentPage, setRecentPage] = useState(1);
-  const [totalRecentPages, setTotalRecentPages] = useState(0);
-  const [totalRecentConversations, setTotalRecentConversations] = useState(0);
+  const [hasMoreRecent, setHasMoreRecent] = useState(true);
   const [isLoadingRecent, setIsLoadingRecent] = useState(false);
   const [recentError, setRecentError] = useState<string | null>(null);
-  const [retryRecent, setRetryRecent] = useState(0);
+  const recentPageRef = useRef(0);
+  const totalRecentPagesRef = useRef(0);
+  const hasMoreRecentRef = useRef(true);
+  const isLoadingRecentRef = useRef(false);
+  const recentStartedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const listContainerRef = useRef<HTMLElement>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
   const initiatingUserIdsRef = useRef(new Set<string>());
   const [initiatingUserIds, setInitiatingUserIds] = useState<Set<string>>(
     () => new Set(),
@@ -118,88 +123,177 @@ export default function Sidebar({ className = "" }: SidebarProps) {
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-
-    const loadUsers = async () => {
-      setIsLoadingUsers(true);
-      setUsersError(null);
-      try {
-        const result = await getUsers(currentPage);
-        if (!active) {
-          return;
-        }
-
-        setUsers(result.users);
-        setTotalPages(result.totalPages);
-        setTotalUsers(result.total);
-      } catch {
-        if (active) {
-          setUsersError("Unable to load users.");
-        }
-      } finally {
-        if (active) {
-          setIsLoadingUsers(false);
-        }
-      }
-    };
-
-    void loadUsers();
-    return () => {
-      active = false;
-    };
-  }, [currentPage, retryUsers]);
-
-  useEffect(() => {
-    if (activeTab !== "recent") {
+  const loadNextUsers = useCallback(async () => {
+    if (isLoadingUsersRef.current || !hasMoreUsersRef.current) {
       return;
     }
 
-    let active = true;
-    const loadRecentConversations = async () => {
-      setIsLoadingRecent(true);
-      setRecentError(null);
-      try {
-        const result = await getRecentConversations(recentPage);
-        if (!active) {
-          return;
-        }
-
-        setRecentConversations(
-          mergeRecentConversations(
-            result.conversations,
-            recentConversationUpdatesRef.current,
-            recentPage === 1,
-          ),
-        );
-        setTotalRecentPages(result.totalPages);
-        setTotalRecentConversations(result.total);
-      } catch {
-        if (active) {
-          setRecentError("Unable to load recent chats.");
-        }
-      } finally {
-        if (active) {
-          setIsLoadingRecent(false);
-        }
+    const requestedPage = currentPageRef.current + 1;
+    isLoadingUsersRef.current = true;
+    setIsLoadingUsers(true);
+    setUsersError(null);
+    try {
+      const result = await getUsers(requestedPage);
+      if (!isMountedRef.current) {
+        return;
       }
-    };
 
-    void loadRecentConversations();
+      currentPageRef.current = result.page;
+      totalPagesRef.current = result.totalPages;
+      const hasMore =
+        currentPageRef.current < totalPagesRef.current;
+      hasMoreUsersRef.current = hasMore;
+      setHasMoreUsers(hasMore);
+      if (!hasMore) {
+        observerRef.current?.disconnect();
+      }
+      setUsers((currentUsers) => {
+        const existingIds = new Set(currentUsers.map((user) => user.id));
+        return [
+          ...currentUsers,
+          ...result.users.filter((user) => {
+            if (existingIds.has(user.id)) {
+              return false;
+            }
+            existingIds.add(user.id);
+            return true;
+          }),
+        ];
+      });
+    } catch {
+      hasMoreUsersRef.current = false;
+      setHasMoreUsers(false);
+      observerRef.current?.disconnect();
+      if (isMountedRef.current) {
+        setUsersError("Unable to load users.");
+      }
+    } finally {
+      isLoadingUsersRef.current = false;
+      if (isMountedRef.current) {
+        setIsLoadingUsers(false);
+      }
+    }
+  }, []);
+
+  const loadNextRecent = useCallback(async () => {
+    if (isLoadingRecentRef.current || !hasMoreRecentRef.current) {
+      return;
+    }
+
+    const requestedPage = recentPageRef.current + 1;
+    isLoadingRecentRef.current = true;
+    setIsLoadingRecent(true);
+    setRecentError(null);
+    try {
+      const result = await getRecentConversations(requestedPage);
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      recentPageRef.current = result.page;
+      totalRecentPagesRef.current = result.totalPages;
+      const hasMore =
+        recentPageRef.current < totalRecentPagesRef.current;
+      hasMoreRecentRef.current = hasMore;
+      setHasMoreRecent(hasMore);
+      if (!hasMore) {
+        observerRef.current?.disconnect();
+      }
+      setRecentConversations((current) =>
+        mergeRecentConversations(
+          [...current, ...result.conversations],
+          recentConversationUpdatesRef.current,
+          result.page === 1,
+        ),
+      );
+    } catch {
+      hasMoreRecentRef.current = false;
+      setHasMoreRecent(false);
+      observerRef.current?.disconnect();
+      if (isMountedRef.current) {
+        setRecentError("Unable to load recent chats.");
+      }
+    } finally {
+      isLoadingRecentRef.current = false;
+      if (isMountedRef.current) {
+        setIsLoadingRecent(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      active = false;
+      isMountedRef.current = false;
+      observerRef.current?.disconnect();
     };
-  }, [activeTab, recentPage, retryRecent]);
+  }, []);
+
+  useEffect(() => {
+    if (!usersStartedRef.current) {
+      usersStartedRef.current = true;
+      void loadNextUsers();
+    }
+  }, [loadNextUsers]);
+
+  useEffect(() => {
+    if (activeTab === "recent" && !recentStartedRef.current) {
+      recentStartedRef.current = true;
+      void loadNextRecent();
+    }
+  }, [activeTab, loadNextRecent]);
 
   useEffect(() => {
     setRecentConversations((current) =>
       mergeRecentConversations(
         current,
         recentConversationUpdates,
-        recentPage === 1,
+        recentPageRef.current <= 1,
       ),
     );
-  }, [recentConversationUpdates, recentPage]);
+  }, [recentConversationUpdates]);
+
+  useEffect(() => {
+    const root = listContainerRef.current;
+    const sentinel = loadMoreSentinelRef.current;
+    const hasMore = activeTab === "users" ? hasMoreUsers : hasMoreRecent;
+    const hasError = activeTab === "users" ? usersError : recentError;
+    if (!root || !sentinel || !hasMore || hasError) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) {
+          return;
+        }
+
+        if (activeTab === "users") {
+          void loadNextUsers();
+        } else {
+          void loadNextRecent();
+        }
+      },
+      { root, rootMargin: "200px", threshold: 0 },
+    );
+    observerRef.current = observer;
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+      if (observerRef.current === observer) {
+        observerRef.current = null;
+      }
+    };
+  }, [
+    activeTab,
+    hasMoreRecent,
+    hasMoreUsers,
+    loadNextRecent,
+    loadNextUsers,
+    recentError,
+    usersError,
+  ]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -245,18 +339,21 @@ export default function Sidebar({ className = "" }: SidebarProps) {
     }
   };
 
-  const page = activeTab === "users" ? currentPage : recentPage;
-  const activeTotalPages =
-    activeTab === "users" ? totalPages : totalRecentPages;
-  const totalItems =
-    activeTab === "users" ? totalUsers : totalRecentConversations;
+  const activeHasMore = activeTab === "users" ? hasMoreUsers : hasMoreRecent;
   const isLoading = activeTab === "users" ? isLoadingUsers : isLoadingRecent;
+  const activeError = activeTab === "users" ? usersError : recentError;
 
-  const changePage = (nextPage: number) => {
+  const retryLoading = () => {
     if (activeTab === "users") {
-      setCurrentPage(nextPage);
+      hasMoreUsersRef.current = true;
+      setHasMoreUsers(true);
+      setUsersError(null);
+      void loadNextUsers();
     } else {
-      setRecentPage(nextPage);
+      hasMoreRecentRef.current = true;
+      setHasMoreRecent(true);
+      setRecentError(null);
+      void loadNextRecent();
     }
   };
 
@@ -324,30 +421,18 @@ export default function Sidebar({ className = "" }: SidebarProps) {
         </div>
       </div>
       <nav
+        ref={listContainerRef}
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
         id="sidebar-panel"
         role="tabpanel"
         aria-labelledby={`${activeTab}-tab`}
       >
         {activeTab === "users" ? (
-          isLoadingUsers ? (
+          isLoadingUsers && users.length === 0 ? (
             <p className="px-4 py-3 text-sm text-bright-teal-blue" role="status">
               Loading users...
             </p>
-          ) : usersError ? (
-            <div className="px-4 py-3">
-              <p className="text-sm text-red-700" role="alert">
-                {usersError}
-              </p>
-              <button
-                className="mt-2 text-sm font-semibold text-bright-teal-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40"
-                type="button"
-                onClick={() => setRetryUsers((retryCount) => retryCount + 1)}
-              >
-                Try again
-              </button>
-            </div>
-          ) : users.length === 0 ? (
+          ) : users.length === 0 && !usersError ? (
             <p className="px-4 py-3 text-sm text-bright-teal-blue">
               No other users found.
             </p>
@@ -369,24 +454,11 @@ export default function Sidebar({ className = "" }: SidebarProps) {
               ))}
             </>
           )
-        ) : isLoadingRecent ? (
+        ) : isLoadingRecent && recentConversations.length === 0 ? (
           <p className="px-4 py-3 text-sm text-bright-teal-blue" role="status">
             Loading recent chats...
           </p>
-        ) : recentError ? (
-          <div className="px-4 py-3">
-            <p className="text-sm text-red-700" role="alert">
-              {recentError}
-            </p>
-            <button
-              className="mt-2 text-sm font-semibold text-bright-teal-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40"
-              type="button"
-              onClick={() => setRetryRecent((retryCount) => retryCount + 1)}
-            >
-              Try again
-            </button>
-          </div>
-        ) : recentConversations.length === 0 ? (
+        ) : recentConversations.length === 0 && !recentError ? (
           <p className="px-4 py-3 text-sm text-bright-teal-blue">
             No recent chats.
           </p>
@@ -421,33 +493,36 @@ export default function Sidebar({ className = "" }: SidebarProps) {
             </button>
           ))
         )}
-      </nav>
-      {activeTotalPages > 0 && (
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-frosted-blue px-4 py-3">
-          <p className="text-xs text-bright-teal-blue" aria-live="polite">
-            Page {page} of {activeTotalPages} · {totalItems}{" "}
-            {activeTab === "users" ? "users" : "chats"}
-          </p>
-          <div className="flex gap-2">
+        {activeError && (
+          <div className="px-4 py-3">
+            <p className="text-sm text-red-700" role="alert">
+              {activeError}
+            </p>
             <button
-              className="rounded-lg border border-frosted-blue px-2.5 py-1.5 text-xs font-semibold text-deep-twilight hover:bg-light-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40 disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-2 text-sm font-semibold text-bright-teal-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40"
               type="button"
-              disabled={isLoading || page <= 1}
-              onClick={() => changePage(page - 1)}
+              onClick={retryLoading}
             >
-              Previous
-            </button>
-            <button
-              className="rounded-lg border border-frosted-blue px-2.5 py-1.5 text-xs font-semibold text-deep-twilight hover:bg-light-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40 disabled:cursor-not-allowed disabled:opacity-50"
-              type="button"
-              disabled={isLoading || page >= activeTotalPages}
-              onClick={() => changePage(page + 1)}
-            >
-              Next
+              Try again
             </button>
           </div>
-        </footer>
-      )}
+        )}
+        {activeHasMore && !activeError && (
+          <div
+            ref={loadMoreSentinelRef}
+            className="h-px w-full"
+            aria-hidden="true"
+          />
+        )}
+        {isLoading && (
+          <div className="flex justify-center py-3" role="status">
+            <span className="size-4 animate-spin rounded-full border-2 border-frosted-blue border-t-bright-teal-blue" />
+            <span className="sr-only">
+              {activeTab === "users" ? "Loading more users" : "Loading more chats"}
+            </span>
+          </div>
+        )}
+      </nav>
       <ConfirmDialog
         open={isLogoutDialogOpen}
         onOpenChange={setIsLogoutDialogOpen}
