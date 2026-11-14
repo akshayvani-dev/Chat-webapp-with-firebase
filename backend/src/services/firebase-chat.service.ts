@@ -92,6 +92,16 @@ export async function sendConversationMessage(
     throw new AppError(503, "Unable to send message");
   }
 
+  await prisma.conversation.update({
+    where: { id: conversation.id },
+    data: {
+      lastMessageId: id,
+      lastMessage: text,
+      lastMessageSenderId: authenticatedUserId,
+      lastMessageAt: createdAt,
+    },
+  });
+
   return {
     id,
     text,

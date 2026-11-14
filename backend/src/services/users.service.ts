@@ -11,8 +11,6 @@ export type ListUsersOptions = {
 export type ListedUser = {
   id: string;
   name: string;
-  chatInitiated: boolean;
-  conversationId: string | null;
 };
 
 export async function listUsers(
@@ -24,13 +22,8 @@ export async function listUsers(
     prisma.$queryRaw<ListedUser[]>(Prisma.sql`
       SELECT
         u."id",
-        u."name",
-        (c."id" IS NOT NULL) AS "chatInitiated",
-        c."id"::text AS "conversationId"
+        u."name"
       FROM "users" AS u
-      LEFT JOIN "conversations" AS c
-        ON c."participants" @> ARRAY[u."id"::uuid]
-        AND c."participants" @> ARRAY[${excludedUserId}::uuid]
       WHERE u."id" <> ${excludedUserId}
       ORDER BY u."name" ASC, u."id" ASC
       OFFSET ${(page - 1) * limit}

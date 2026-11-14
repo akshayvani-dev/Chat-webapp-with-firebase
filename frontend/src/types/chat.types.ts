@@ -11,7 +11,15 @@ export type ConversationMessage = {
   createdAt: string;
 };
 
-export type ListedUser = DirectoryUser & {
-  chatInitiated: boolean;
-  conversationId: string | null;
+export type ListedUser = {
+  id: string;
+  name: string;
+};
+
+export type RecentConversation = {
+  conversationId: string;
+  userId: string;
+  name: string;
+  lastMessage: string | null;
+  lastMessageAt: string | null;
 };

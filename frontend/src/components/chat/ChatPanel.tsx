@@ -1,8 +1,15 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getErrorMessage } from "../../apis/axiosInstance";
 import { getUserById, sendMessage } from "../../apis/users.api";
 import { subscribeToConversationMessages } from "../../config/firebase-chat";
+import { useRecentConversations } from "./RecentConversationsContext";
 import { useAppSelector } from "../../store/hooks";
 import type {
   ConversationMessage,
@@ -22,6 +29,7 @@ export default function ChatPanel() {
   const navigate = useNavigate();
   const currentUserId = useAppSelector((state) => state.auth.user?.id ?? null);
   const firebaseUser = useAppSelector((state) => state.auth.firebaseUser);
+  const { updateRecentConversation } = useRecentConversations();
   const [user, setUser] = useState<DirectoryUser | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [userError, setUserError] = useState<string | null>(null);
@@ -32,6 +40,23 @@ export default function ChatPanel() {
   const [isSending, setIsSending] = useState(false);
   const sendingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const updateRecentPreview = useCallback(
+    (message: ConversationMessage) => {
+      if (!user?.conversationId) {
+        return;
+      }
+
+      updateRecentConversation({
+        conversationId: user.conversationId,
+        userId: user.id,
+        name: user.name,
+        lastMessage: message.text,
+        lastMessageAt: message.createdAt,
+      });
+    },
+    [updateRecentConversation, user],
+  );
 
   useEffect(() => {
     let active = true;
@@ -115,6 +140,10 @@ export default function ChatPanel() {
       currentUserId,
       (nextMessages) => {
         setMessages(nextMessages);
+        const latestMessage = nextMessages[nextMessages.length - 1];
+        if (latestMessage) {
+          updateRecentPreview(latestMessage);
+        }
         setIsLoadingMessages(false);
         setMessageError(null);
       },
@@ -130,6 +159,7 @@ export default function ChatPanel() {
     firebaseUser,
     id,
     isLoadingUser,
+    updateRecentPreview,
     user,
     userError,
   ]);
@@ -156,7 +186,8 @@ export default function ChatPanel() {
     setIsSending(true);
     setMessageError(null);
     try {
-      await sendMessage(conversationId, text);
+      const message = await sendMessage(conversationId, text);
+      updateRecentPreview(message);
       setDraft("");
     } catch (error) {
       setMessageError(getErrorText(error));
@@ -258,6 +289,39 @@ export default function ChatPanel() {
                       minute: "2-digit",
                     })}
                   </time>
+                  {isOwnMessage && (
+                    <div
+                      className="mt-2 flex cursor-pointer justify-end gap-2 text-emerald-100"
+                      aria-hidden="true"
+                    >
+                      <svg
+                        className="h-4 w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                      </svg>
+                      <svg
+                        className="h-4 w-4"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="m19 6-1 14H6L5 6" />
+                        <path d="M10 11v5M14 11v5" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
               </article>
             );
