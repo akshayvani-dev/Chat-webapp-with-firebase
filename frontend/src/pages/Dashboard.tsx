@@ -3,10 +3,13 @@ import Sidebar from "../components/chat/Sidebar";
 import { RecentConversationsProvider } from "../components/chat/RecentConversationsContext";
 
 export default function Dashboard() {
-  const hasSelectedChat = Boolean(useMatch("/dashboard/chat_room/:id"));
+  const selectedChat = useMatch("/dashboard/chat_room/:id");
+  const hasSelectedChat = Boolean(selectedChat);
 
   return (
-    <RecentConversationsProvider>
+    <RecentConversationsProvider
+      activeConversationUserId={selectedChat?.params.id}
+    >
       <main className="flex h-dvh min-h-[420px] overflow-hidden bg-light-cyan text-deep-twilight">
         <Sidebar
           className={`w-full shrink-0 md:w-80 ${
