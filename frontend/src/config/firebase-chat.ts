@@ -1,12 +1,16 @@
 import type { Unsubscribe } from "firebase/auth";
 import {
   collection,
+  doc,
+  getDoc,
   getFirestore,
   limit,
   limitToLast,
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
+  setDoc,
   Timestamp,
 } from "firebase/firestore";
 import type { ConversationMessage } from "../types/chat.types";
@@ -167,4 +171,51 @@ export function subscribeToLatestConversationMessage(
     cancelled = true;
     unsubscribe();
   };
+}
+
+/**
+ * Returns the timestamp of the last message the user has seen in a
+ * conversation, or null if they have never opened it.
+ */
+export async function getLastSeenAt(
+  conversationId: string,
+  userId: string,
+): Promise<Date | null> {
+  const database = getFirestore(getFirebaseApp());
+  const memberRef = doc(
+    database,
+    "conversation_firebase",
+    conversationId,
+    "members",
+    userId,
+  );
+  const snap = await getDoc(memberRef);
+  if (!snap.exists()) {
+    return null;
+  }
+  const lastSeenAt = snap.data().lastSeenAt;
+  return lastSeenAt instanceof Timestamp ? lastSeenAt.toDate() : null;
+}
+
+/**
+ * Records that the current user has seen all messages up to now in a
+ * conversation. Called whenever the chat panel is open and messages load.
+ */
+export async function markConversationSeen(
+  conversationId: string,
+  userId: string,
+): Promise<void> {
+  const database = getFirestore(getFirebaseApp());
+  const memberRef = doc(
+    database,
+    "conversation_firebase",
+    conversationId,
+    "members",
+    userId,
+  );
+  await setDoc(
+    memberRef,
+    { lastSeenAt: serverTimestamp() },
+    { merge: true },
+  );
 }

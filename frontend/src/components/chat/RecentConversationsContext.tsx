@@ -9,7 +9,10 @@ import {
   type ReactNode,
 } from "react";
 import { getRecentConversations } from "../../apis/conversations.api";
-import { subscribeToLatestConversationMessage } from "../../config/firebase-chat";
+import {
+  getLastSeenAt,
+  subscribeToLatestConversationMessage,
+} from "../../config/firebase-chat";
 import { useAppSelector } from "../../store/hooks";
 import type { RecentConversation } from "../../types/chat.types";
 import chatSoundSrc from "../../assets/chat_sound.mp3";
@@ -21,6 +24,8 @@ type RecentConversationsContextValue = {
   updateRecentConversation: (conversation: RecentConversation) => void;
   activeSidebarTab: SidebarTab;
   setActiveSidebarTab: (tab: SidebarTab) => void;
+  unreadConversationIds: ReadonlySet<string>;
+  markConversationRead: (conversationId: string) => void;
 };
 
 const RecentConversationsContext =
@@ -54,6 +59,28 @@ export function RecentConversationsProvider({
   const subscriptionsRef = useRef(new Map<string, () => void>());
   const activeConversationUserIdRef = useRef(activeConversationUserId);
   activeConversationUserIdRef.current = activeConversationUserId;
+
+  const [unreadConversationIds, setUnreadConversationIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const markConversationRead = useCallback((conversationId: string) => {
+    setUnreadConversationIds((prev) => {
+      if (!prev.has(conversationId)) return prev;
+      const next = new Set(prev);
+      next.delete(conversationId);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!activeConversationUserId) return;
+    for (const conv of Object.values(updatesByConversation)) {
+      if (conv.userId === activeConversationUserId) {
+        markConversationRead(conv.conversationId);
+      }
+    }
+  }, [activeConversationUserId, updatesByConversation, markConversationRead]);
 
   const updateRecentConversation = useCallback(
     (conversation: RecentConversation) => {
@@ -96,10 +123,53 @@ export function RecentConversationsProvider({
         return;
       }
 
+      // Closure-local variables to handle the race between getLastSeenAt
+      // (async Firestore read) and the initial Firestore snapshot callback.
+      // Either may arrive first; both orderings are handled correctly.
+      let resolvedLastSeenAt: Date | null | undefined = undefined; // undefined = not yet loaded
+      // undefined = initial snapshot hasn't arrived yet
+      let pendingInitialMessage: { senderId: string; createdAt: string } | null | undefined =
+        undefined;
+
+      const checkInitialUnread = (
+        message: { senderId: string; createdAt: string } | null,
+        lastSeenAt: Date | null,
+      ) => {
+        if (!message || message.senderId === currentUserId) return;
+        // Don't mark unread when the user already has this chat open.
+        if (conversation.userId === activeConversationUserIdRef.current) return;
+        const msgTime = Date.parse(message.createdAt);
+        const isUnread = !lastSeenAt || msgTime > lastSeenAt.getTime();
+        if (isUnread) {
+          setUnreadConversationIds((prev) => {
+            if (prev.has(conversation.conversationId)) return prev;
+            return new Set(prev).add(conversation.conversationId);
+          });
+        }
+      };
+
+      // Fetch the user's last-seen timestamp from Firestore once on subscribe.
+      void getLastSeenAt(conversation.conversationId, currentUserId)
+        .then((seenAt) => {
+          resolvedLastSeenAt = seenAt;
+          // If the initial snapshot already arrived, process it now.
+          if (pendingInitialMessage !== undefined) {
+            checkInitialUnread(pendingInitialMessage, seenAt);
+          }
+        })
+        .catch(() => {
+          // On error fall back to treating everything as potentially unread.
+          resolvedLastSeenAt = null;
+          if (pendingInitialMessage !== undefined) {
+            checkInitialUnread(pendingInitialMessage, null);
+          }
+        });
+
       const unsubscribe = subscribeToLatestConversationMessage(
         conversation.conversationId,
         currentUserId,
         (message, isInitialSnapshot, isNewMessage) => {
+          // ── New message while the app is running ────────────────────────
           if (
             isNewMessage &&
             message &&
@@ -107,9 +177,23 @@ export function RecentConversationsProvider({
             conversation.userId !== activeConversationUserIdRef.current
           ) {
             playIncomingMessageSound();
+            setUnreadConversationIds((prev) => {
+              if (prev.has(conversation.conversationId)) return prev;
+              return new Set(prev).add(conversation.conversationId);
+            });
           }
 
+          // ── Initial snapshot on mount — check against persisted lastSeenAt ──
           if (isInitialSnapshot) {
+            if (resolvedLastSeenAt !== undefined) {
+              // getLastSeenAt already resolved — check immediately.
+              checkInitialUnread(message, resolvedLastSeenAt);
+            } else {
+              // getLastSeenAt still in-flight — store message for deferred check.
+              pendingInitialMessage = message;
+            }
+
+            // Skip the recent-conversation update if data already matches.
             const currentTimestamp = conversation.lastMessageAt
               ? Date.parse(conversation.lastMessageAt)
               : null;
@@ -192,12 +276,16 @@ export function RecentConversationsProvider({
       updateRecentConversation,
       activeSidebarTab,
       setActiveSidebarTab,
+      unreadConversationIds,
+      markConversationRead,
     }),
     [
       activeSidebarTab,
       updatesByConversation,
       updateRecentConversation,
       setActiveSidebarTab,
+      unreadConversationIds,
+      markConversationRead,
     ],
   );
 

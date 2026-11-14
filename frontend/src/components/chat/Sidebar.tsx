@@ -88,6 +88,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
     activeSidebarTab: activeTab,
     recentConversationUpdates,
     setActiveSidebarTab: setActiveTab,
+    unreadConversationIds,
   } = useRecentConversations();
   const recentConversationUpdatesRef = useRef(recentConversationUpdates);
   recentConversationUpdatesRef.current = recentConversationUpdates;
@@ -479,14 +480,26 @@ export default function Sidebar({ className = "" }: SidebarProps) {
                 )
               }
             >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-turquoise-surf/20 text-sm font-semibold text-deep-twilight">
+              <span className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-turquoise-surf/20 text-sm font-semibold text-deep-twilight">
                 {conversation.name.slice(0, 1).toUpperCase() || "?"}
+                {unreadConversationIds.has(conversation.conversationId) && (
+                  <span
+                    className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-bright-teal-blue ring-2 ring-white"
+                    aria-label="Unread messages"
+                  />
+                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-deep-twilight">
                   {conversation.name}
                 </span>
-                <span className="mt-1 block truncate text-xs text-bright-teal-blue">
+                <span
+                  className={`mt-1 block truncate text-xs ${
+                    unreadConversationIds.has(conversation.conversationId)
+                      ? "font-semibold text-deep-twilight"
+                      : "text-bright-teal-blue"
+                  }`}
+                >
                   {conversation.lastMessage ?? "No messages yet"}
                 </span>
               </span>
