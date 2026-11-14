@@ -30,6 +30,16 @@ import type {
   ConversationMessage,
   DirectoryUser,
 } from "../../types/chat.types";
+import { MessageListSkeleton } from "./Chatskeletons";
+
+type Status = "loading" | "ready" | "error";
+
+const SKELETON_DELAY_MS = 150;
+
+// Simple in-memory caches so revisiting a conversation renders instantly
+// while the subscription refreshes in the background.
+const userCache = new Map<string, DirectoryUser>();
+const messageCache = new Map<string, ConversationMessage[]>();
 
 function getErrorText(error: unknown): string {
   const apiMessage = getErrorMessage(error);
@@ -46,10 +56,11 @@ export default function ChatPanel() {
   const firebaseUser = useAppSelector((state) => state.auth.firebaseUser);
   const { updateRecentConversation } = useRecentConversations();
   const [user, setUser] = useState<DirectoryUser | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [userError, setUserError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [status, setStatus] = useState<Status>("loading");
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [messageError, setMessageError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -62,6 +73,15 @@ export default function ChatPanel() {
   const sendingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // One status for the screen. While the route id and the loaded user do not
+  // match yet (first render after switching conversations), treat it as loading.
+  const userMatches = Boolean(user && user.id === id);
+  const viewStatus: Status = userError
+    ? "error"
+    : !userMatches
+      ? "loading"
+      : status;
 
   useLayoutEffect(() => {
     const textarea = messageInputRef.current;
@@ -76,6 +96,20 @@ export default function ChatPanel() {
     textarea.style.overflowY =
       textarea.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [draft]);
+
+  // Show the skeleton only if loading lasts longer than the delay.
+  useEffect(() => {
+    if (viewStatus !== "loading") {
+      setShowSkeleton(false);
+      return;
+    }
+
+    const timer = window.setTimeout(
+      () => setShowSkeleton(true),
+      SKELETON_DELAY_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [viewStatus, id]);
 
   const updateRecentPreview = useCallback(
     (message: ConversationMessage | null) => {
@@ -100,17 +134,21 @@ export default function ChatPanel() {
     if (!id) {
       setUser(null);
       setUserError(null);
-      setIsLoadingUser(false);
       return () => {
         active = false;
       };
     }
 
+    const cachedUser = userCache.get(id) ?? null;
+    const cachedMessages = cachedUser?.conversationId
+      ? messageCache.get(cachedUser.conversationId)
+      : undefined;
+
     const loadUser = async () => {
-      setUser(null);
+      setUser(cachedUser);
       setUserError(null);
-      setIsLoadingUser(true);
-      setMessages([]);
+      setMessages(cachedMessages ?? []);
+      setStatus(cachedMessages ? "ready" : "loading");
       setMessageError(null);
       setDraft("");
       setEditingMessageId(null);
@@ -119,16 +157,14 @@ export default function ChatPanel() {
 
       try {
         const result = await getUserById(id);
+        userCache.set(id, result);
         if (active) {
           setUser(result);
         }
       } catch (requestError) {
-        if (active) {
+        // With cached data on screen, fail silently and keep showing it.
+        if (active && !cachedUser) {
           setUserError(getErrorText(requestError));
-        }
-      } finally {
-        if (active) {
-          setIsLoadingUser(false);
         }
       }
     };
@@ -137,73 +173,61 @@ export default function ChatPanel() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, retryKey]);
 
   useEffect(() => {
-    if (!id || !user || user.id !== id || isLoadingUser) {
-      setMessages([]);
-      setIsLoadingMessages(false);
-      setMessageError(null);
+    if (!id || !user || user.id !== id) {
       return;
     }
 
-    if (userError) {
-      setIsLoadingMessages(false);
-      return;
-    }
-
-    if (!user.conversationId) {
+    const conversationId = user.conversationId;
+    if (!conversationId) {
       setMessages([]);
-      setIsLoadingMessages(false);
-      setMessageError(null);
+      setStatus("ready");
       return;
     }
 
     if (!currentUserId || !firebaseUser) {
-      setIsLoadingMessages(true);
-      setMessageError(null);
       return;
     }
 
     if (firebaseUser.uid !== currentUserId) {
-      setMessages([]);
-      setIsLoadingMessages(false);
       setMessageError("Firebase session does not match the signed-in account.");
+      setStatus("error");
       return;
     }
 
-    setIsLoadingMessages(true);
     setMessageError(null);
     const unsubscribe = subscribeToConversationMessages(
-      user.conversationId,
+      conversationId,
       currentUserId,
       (nextMessages) => {
+        messageCache.set(conversationId, nextMessages);
         setMessages(nextMessages);
         const latestMessage = nextMessages[nextMessages.length - 1];
         updateRecentPreview(latestMessage ?? null);
-        setIsLoadingMessages(false);
+        setStatus("ready");
         setMessageError(null);
       },
       (error) => {
-        setIsLoadingMessages(false);
         setMessageError(error.message);
+        // Keep showing cached messages if we have them; otherwise show retry.
+        if (!messageCache.has(conversationId)) {
+          setStatus("error");
+        }
       },
     );
 
     return unsubscribe;
-  }, [
-    currentUserId,
-    firebaseUser,
-    id,
-    isLoadingUser,
-    updateRecentPreview,
-    user,
-    userError,
-  ]);
+  }, [currentUserId, firebaseUser, id, retryKey, updateRecentPreview, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleRetry = () => {
+    setRetryKey((key) => key + 1);
+  };
 
   const handleSendMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -318,7 +342,7 @@ export default function ChatPanel() {
   return (
     <section
       className="auth-grainy-background flex min-h-0 flex-1 flex-col"
-      aria-label={user ? `Conversation with ${user.name}` : "Conversation"}
+      aria-label={userMatches && user ? `Conversation with ${user.name}` : "Conversation"}
     >
       <header className="flex h-[73px] shrink-0 items-center gap-3 border-b border-frosted-blue bg-white px-4 sm:px-6">
         <button
@@ -330,7 +354,16 @@ export default function ChatPanel() {
           Back
         </button>
         <h2 className="truncate text-base font-semibold text-deep-twilight">
-          {isLoadingUser ? "Loading user..." : user?.name ?? "User"}
+          {userMatches && user ? (
+            user.name
+          ) : userError ? (
+            "User"
+          ) : (
+            <span
+              className="inline-block h-4 w-32 animate-pulse rounded bg-frosted-blue align-middle"
+              aria-hidden="true"
+            />
+          )}
         </h2>
       </header>
 
@@ -340,22 +373,28 @@ export default function ChatPanel() {
         aria-label="Messages"
         aria-live="polite"
         aria-relevant="additions text"
+        aria-busy={viewStatus === "loading"}
       >
-        {isLoadingUser || isLoadingMessages ? (
-          <p className="m-auto text-base font-medium text-white/85" role="status">
-            {isLoadingUser ? "Loading conversation..." : "Loading messages..."}
-          </p>
-        ) : userError ? (
-          <p className="m-auto text-sm text-red-700" role="alert">
-            {userError}
-          </p>
+        {viewStatus === "loading" ? (
+          showSkeleton ? (
+            <MessageListSkeleton />
+          ) : null
+        ) : viewStatus === "error" ? (
+          <div className="m-auto flex flex-col items-center gap-3 text-center">
+            <p className="text-sm text-red-700" role="alert">
+              {userError ?? messageError ?? "Something went wrong"}
+            </p>
+            <button
+              className="cursor-pointer rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-bright-teal-blue transition-colors hover:bg-light-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70"
+              type="button"
+              onClick={handleRetry}
+            >
+              Retry
+            </button>
+          </div>
         ) : !user?.conversationId ? (
           <p className="m-auto text-center text-sm text-bright-teal-blue">
             Select this user from the sidebar to start a conversation.
-          </p>
-        ) : messageError && messages.length === 0 ? (
-          <p className="m-auto text-sm text-red-700" role="alert">
-            {messageError}
           </p>
         ) : messages.length === 0 ? (
           <p className="m-auto text-base font-medium text-white/85">
@@ -463,7 +502,7 @@ export default function ChatPanel() {
             );
           })
         )}
-        {messageError && messages.length > 0 && (
+        {viewStatus === "ready" && messageError && (
           <p className="text-center text-sm text-red-700" role="alert">
             {messageError}
           </p>
