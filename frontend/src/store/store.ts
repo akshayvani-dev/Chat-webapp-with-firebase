@@ -1,5 +1,8 @@
 import { configureStore } from "@reduxjs/toolkit";
-import { registerOnAuthFailure } from "../apis/axiosInstance";
+import {
+  registerHasAuthenticatedUser,
+  registerOnAuthFailure,
+} from "../apis/axiosInstance";
 import { clearUser } from "./authSlice";
 import authReducer from "./authSlice";
 import { signOutFromFirebase } from "../config/firebase";
@@ -20,3 +23,7 @@ registerOnAuthFailure(() => {
   });
   window.location.replace("/signin");
 });
+
+registerHasAuthenticatedUser(
+  () => store.getState().auth.user !== null,
+);

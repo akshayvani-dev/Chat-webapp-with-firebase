@@ -5,9 +5,7 @@ import { findUserById } from "../services/auth.service.js";
 
 export const authenticate: RequestHandler = async (req, _res, next) => {
   try {
-    const authorization = req.get("authorization");
-    const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
-    const token = req.cookies?.accessToken ?? bearerToken;
+    const token = req.cookies?.accessToken;
 
     if (typeof token !== "string" || token.length === 0) {
       throw new AppError(401, "Unauthorized");

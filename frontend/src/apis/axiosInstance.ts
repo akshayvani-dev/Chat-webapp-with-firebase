@@ -13,19 +13,21 @@ type RetriableRequestConfig = NonNullable<
   Parameters<typeof axiosInstance.request>[0]
 > & {
   _retry?: boolean;
+  skipAuthRefresh?: boolean;
 };
 
 let refreshPromise: Promise<void> | null = null;
 let onAuthFailure: (() => void) | null = null;
+let hasAuthenticatedUser: (() => boolean) | null = null;
 
 export function registerOnAuthFailure(callback: () => void): void {
   onAuthFailure = callback;
 }
 
-function isExcludedAuthRequest(url: string | undefined): boolean {
-  return /(?:^|\/)auth\/(?:signin|signup|refresh|me)\/?(?:[?#]|$)/.test(
-    url ?? "",
-  );
+export function registerHasAuthenticatedUser(
+  callback: () => boolean,
+): void {
+  hasAuthenticatedUser = callback;
 }
 
 axiosInstance.interceptors.response.use(
@@ -40,14 +42,21 @@ axiosInstance.interceptors.response.use(
     }
 
     const originalRequest = error.config as RetriableRequestConfig;
-    if (originalRequest._retry || isExcludedAuthRequest(originalRequest.url)) {
+    if (
+      originalRequest._retry ||
+      originalRequest.skipAuthRefresh ||
+      !hasAuthenticatedUser?.()
+    ) {
       throw error;
     }
 
     originalRequest._retry = true;
     if (!refreshPromise) {
+      const refreshConfig: RetriableRequestConfig = {
+        skipAuthRefresh: true,
+      };
       refreshPromise = axiosInstance
-        .post<void>("/auth/refresh")
+        .post<void>("/auth/refresh", undefined, refreshConfig)
         .then(() => undefined)
         .catch((refreshError: unknown) => {
           clearSessionFlag();
