@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { LogOut, MessageCircle, UsersRound } from "lucide-react";
 import { logout } from "../../apis/auth.api";
 import { getRecentConversations } from "../../apis/conversations.api";
 import { getUsers, initiateConversation } from "../../apis/users.api";
@@ -261,50 +262,66 @@ export default function Sidebar({ className = "" }: SidebarProps) {
 
   return (
     <aside
-      className={`flex h-full min-h-0 flex-col border-r border-stone-200 bg-white ${className}`}
+      className={`flex h-full min-h-0 flex-col border-r border-frosted-blue/70 bg-white ${className}`}
       aria-label="Chats"
     >
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-200 px-5 py-5">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
-            Signed in as
-          </p>
-          <p className="mt-1 truncate text-sm font-semibold text-stone-900">
-            {currentUserName}
-          </p>
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-frosted-blue/70 bg-white/80 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-deep-twilight text-lg font-semibold text-white shadow-sm">
+            {currentUserName.slice(0, 1).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-bright-teal-blue">
+              Chat App
+            </p>
+            <p className="mt-0.5 truncate text-sm font-semibold text-deep-twilight">
+              {currentUserName}
+            </p>
+          </div>
         </div>
         <button
-          className="shrink-0 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-bright-teal-blue transition hover:bg-light-cyan hover:text-deep-twilight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40"
           type="button"
+          aria-label="Log out"
+          title="Log out"
           onClick={() => setIsLogoutDialogOpen(true)}
         >
-          Logout
+          <LogOut className="size-5" aria-hidden="true" />
         </button>
       </header>
 
-      <div
-        className="flex shrink-0 border-b border-stone-200 px-3 pt-3"
-        role="tablist"
-        aria-label="Sidebar lists"
-      >
-        {(["users", "recent"] as const).map((tab) => (
-          <button
-            key={tab}
-            id={`${tab}-tab`}
-            className={`flex-1 cursor-pointer border-b-2 px-3 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-700/40 ${
-              activeTab === tab
-                ? "border-emerald-700 text-emerald-800"
-                : "border-transparent text-stone-500 hover:text-stone-800"
-            }`}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab}
-            aria-controls="sidebar-panel"
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab === "users" ? "Users" : "Recent chats"}
-          </button>
-        ))}
+      <div className="shrink-0 px-4 pb-4 pt-5">
+        <p className="mb-3 px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-bright-teal-blue">
+          Your workspace
+        </p>
+        <div
+          className="grid grid-cols-2 gap-1 rounded-2xl border border-frosted-blue/70 bg-white/75 p-1.5 shadow-sm"
+          role="tablist"
+          aria-label="Sidebar lists"
+        >
+          {(["users", "recent"] as const).map((tab) => {
+            const Icon = tab === "users" ? UsersRound : MessageCircle;
+            return (
+              <button
+                key={tab}
+                id={`${tab}-tab`}
+                className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bright-teal-blue/50 sm:text-sm ${
+                  activeTab === tab
+                    ? "bg-deep-twilight text-white shadow-sm"
+                    : "text-bright-teal-blue hover:bg-light-cyan hover:text-deep-twilight"
+                }`}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                aria-controls="sidebar-panel"
+                onClick={() => setActiveTab(tab)}
+              >
+                <Icon className="size-4" aria-hidden="true" />
+                {tab === "users" ? "Users" : "Recent chats"}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <nav
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
@@ -314,7 +331,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
       >
         {activeTab === "users" ? (
           isLoadingUsers ? (
-            <p className="px-4 py-3 text-sm text-stone-500" role="status">
+            <p className="px-4 py-3 text-sm text-bright-teal-blue" role="status">
               Loading users...
             </p>
           ) : usersError ? (
@@ -323,7 +340,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
                 {usersError}
               </p>
               <button
-                className="mt-2 text-sm font-semibold text-emerald-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40"
+                className="mt-2 text-sm font-semibold text-bright-teal-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40"
                 type="button"
                 onClick={() => setRetryUsers((retryCount) => retryCount + 1)}
               >
@@ -331,7 +348,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
               </button>
             </div>
           ) : users.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-stone-500">
+            <p className="px-4 py-3 text-sm text-bright-teal-blue">
               No other users found.
             </p>
           ) : (
@@ -353,7 +370,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
             </>
           )
         ) : isLoadingRecent ? (
-          <p className="px-4 py-3 text-sm text-stone-500" role="status">
+          <p className="px-4 py-3 text-sm text-bright-teal-blue" role="status">
             Loading recent chats...
           </p>
         ) : recentError ? (
@@ -362,7 +379,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
               {recentError}
             </p>
             <button
-              className="mt-2 text-sm font-semibold text-emerald-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40"
+              className="mt-2 text-sm font-semibold text-bright-teal-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40"
               type="button"
               onClick={() => setRetryRecent((retryCount) => retryCount + 1)}
             >
@@ -370,17 +387,17 @@ export default function Sidebar({ className = "" }: SidebarProps) {
             </button>
           </div>
         ) : recentConversations.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-stone-500">
+          <p className="px-4 py-3 text-sm text-bright-teal-blue">
             No recent chats.
           </p>
         ) : (
           recentConversations.map((conversation) => (
             <button
               key={conversation.conversationId}
-              className={`w-full cursor-pointer border-b border-stone-100 px-4 py-3 text-left transition last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 ${
+              className={`mb-1.5 flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40 ${
                 conversation.userId === selectedUserId
-                  ? "bg-emerald-50"
-                  : "hover:bg-stone-50"
+                  ? "bg-light-cyan/70 shadow-sm ring-1 ring-bright-teal-blue/25"
+                  : "hover:-translate-y-0.5 hover:bg-light-cyan/40 hover:shadow-sm"
               }`}
               type="button"
               aria-pressed={conversation.userId === selectedUserId}
@@ -390,25 +407,30 @@ export default function Sidebar({ className = "" }: SidebarProps) {
                 )
               }
             >
-              <span className="block truncate text-sm font-semibold text-stone-900">
-                {conversation.name}
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-turquoise-surf/20 text-sm font-semibold text-deep-twilight">
+                {conversation.name.slice(0, 1).toUpperCase() || "?"}
               </span>
-              <span className="mt-1 block truncate text-xs text-stone-500">
-                {conversation.lastMessage ?? "No messages yet"}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-deep-twilight">
+                  {conversation.name}
+                </span>
+                <span className="mt-1 block truncate text-xs text-bright-teal-blue">
+                  {conversation.lastMessage ?? "No messages yet"}
+                </span>
               </span>
             </button>
           ))
         )}
       </nav>
       {activeTotalPages > 0 && (
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-stone-200 px-4 py-3">
-          <p className="text-xs text-stone-500" aria-live="polite">
+        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-frosted-blue px-4 py-3">
+          <p className="text-xs text-bright-teal-blue" aria-live="polite">
             Page {page} of {activeTotalPages} · {totalItems}{" "}
             {activeTab === "users" ? "users" : "chats"}
           </p>
           <div className="flex gap-2">
             <button
-              className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-frosted-blue px-2.5 py-1.5 text-xs font-semibold text-deep-twilight hover:bg-light-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={isLoading || page <= 1}
               onClick={() => changePage(page - 1)}
@@ -416,7 +438,7 @@ export default function Sidebar({ className = "" }: SidebarProps) {
               Previous
             </button>
             <button
-              className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-frosted-blue px-2.5 py-1.5 text-xs font-semibold text-deep-twilight hover:bg-light-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={isLoading || page >= activeTotalPages}
               onClick={() => changePage(page + 1)}

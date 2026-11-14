@@ -27,7 +27,7 @@ type AuthSessionLayerProps = {
 
 export function SessionLoader() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f6f5f2] text-stone-700">
+    <main className="auth-grainy-background flex min-h-screen items-center justify-center text-deep-twilight">
       <p role="status">Loading your session...</p>
     </main>
   );

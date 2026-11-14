@@ -200,10 +200,10 @@ export default function ChatPanel() {
   if (!id) {
     return (
       <section
-        className="flex min-h-0 flex-1 items-center justify-center bg-stone-50 px-6 text-center"
+        className="auth-grainy-background flex min-h-0 flex-1 items-center justify-center px-6 text-center"
         aria-label="Conversation"
       >
-        <p className="text-sm text-stone-500">
+        <p className="text-base font-medium text-white/85">
           Select chat to view chat history
         </p>
       </section>
@@ -218,19 +218,19 @@ export default function ChatPanel() {
 
   return (
     <section
-      className="flex min-h-0 flex-1 flex-col bg-stone-50"
+      className="auth-grainy-background flex min-h-0 flex-1 flex-col"
       aria-label={user ? `Conversation with ${user.name}` : "Conversation"}
     >
-      <header className="flex h-[73px] shrink-0 items-center gap-3 border-b border-stone-200 bg-white px-4 sm:px-6">
+      <header className="flex h-[73px] shrink-0 items-center gap-3 border-b border-frosted-blue bg-white px-4 sm:px-6">
         <button
-          className="rounded-lg px-2 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 md:hidden"
+          className="rounded-lg px-2 py-2 text-sm font-semibold text-bright-teal-blue hover:bg-light-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40 md:hidden"
           type="button"
           onClick={() => navigate("/dashboard/chat_room")}
           aria-label="Back to users"
         >
           Back
         </button>
-        <h2 className="truncate text-base font-semibold text-stone-900">
+        <h2 className="truncate text-base font-semibold text-deep-twilight">
           {isLoadingUser ? "Loading user..." : user?.name ?? "User"}
         </h2>
       </header>
@@ -243,7 +243,7 @@ export default function ChatPanel() {
         aria-relevant="additions text"
       >
         {isLoadingUser || isLoadingMessages ? (
-          <p className="m-auto text-sm text-stone-500" role="status">
+          <p className="m-auto text-base font-medium text-white/85" role="status">
             {isLoadingUser ? "Loading conversation..." : "Loading messages..."}
           </p>
         ) : userError ? (
@@ -251,7 +251,7 @@ export default function ChatPanel() {
             {userError}
           </p>
         ) : !user?.conversationId ? (
-          <p className="m-auto text-center text-sm text-stone-500">
+          <p className="m-auto text-center text-sm text-bright-teal-blue">
             Select this user from the sidebar to start a conversation.
           </p>
         ) : messageError && messages.length === 0 ? (
@@ -259,7 +259,7 @@ export default function ChatPanel() {
             {messageError}
           </p>
         ) : messages.length === 0 ? (
-          <p className="m-auto text-sm text-stone-500">
+          <p className="m-auto text-base font-medium text-white/85">
             No messages yet. Send the first message.
           </p>
         ) : (
@@ -273,14 +273,14 @@ export default function ChatPanel() {
                 <div
                   className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm ${
                     isOwnMessage
-                      ? "bg-emerald-900 text-white"
-                      : "bg-white text-stone-800 shadow-sm"
+                      ? "bg-deep-twilight text-white"
+                      : "bg-white text-deep-twilight shadow-sm"
                   }`}
                 >
                   <p>{message.text}</p>
                   <time
                     className={`mt-1 block text-right text-[11px] ${
-                      isOwnMessage ? "text-emerald-100" : "text-stone-400"
+                      isOwnMessage ? "text-frosted-blue" : "text-bright-teal-blue"
                     }`}
                     dateTime={message.createdAt}
                   >
@@ -290,36 +290,49 @@ export default function ChatPanel() {
                     })}
                   </time>
                   {isOwnMessage && (
-                    <div
-                      className="mt-2 flex cursor-pointer justify-end gap-2 text-emerald-100"
-                      aria-hidden="true"
-                    >
-                      <svg
-                        className="h-4 w-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                    <div className="mt-2 flex justify-end gap-1">
+                      <button
+                        className="cursor-pointer rounded-md p-1 text-frosted-blue transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70"
+                        type="button"
+                        aria-label="Edit message"
+                        title="Edit message"
                       >
-                        <path d="M12 20h9" />
-                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
-                      </svg>
-                      <svg
-                        className="h-4 w-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+                        <svg
+                          className="h-4 w-4"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                        </svg>
+                      </button>
+                      <button
+                        className="cursor-pointer rounded-md p-1 text-frosted-blue transition-colors hover:bg-red-500/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70"
+                        type="button"
+                        aria-label="Delete message"
+                        title="Delete message"
                       >
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4h8v2" />
-                        <path d="m19 6-1 14H6L5 6" />
-                        <path d="M10 11v5M14 11v5" />
-                      </svg>
+                        <svg
+                          className="h-4 w-4"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="m19 6-1 14H6L5 6" />
+                          <path d="M10 11v5M14 11v5" />
+                        </svg>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -336,7 +349,7 @@ export default function ChatPanel() {
       </div>
 
       <form
-        className="flex shrink-0 items-end gap-3 border-t border-stone-200 bg-white p-4 sm:px-6"
+        className="flex shrink-0 items-end gap-3 border-t border-frosted-blue bg-white p-4 sm:px-6"
         onSubmit={handleSendMessage}
       >
         <label className="sr-only" htmlFor="chat-message">
@@ -344,17 +357,29 @@ export default function ChatPanel() {
         </label>
         <textarea
           id="chat-message"
-          className="max-h-32 min-h-11 flex-1 resize-y rounded-xl border border-stone-200 px-4 py-3 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-emerald-700 focus:ring-4 focus:ring-emerald-700/10 disabled:bg-stone-100"
+          className="max-h-32 min-h-11 flex-1 resize-y rounded-xl border border-frosted-blue px-4 py-3 text-sm text-deep-twilight outline-none placeholder:text-bright-teal-blue focus:border-bright-teal-blue focus:ring-4 focus:ring-bright-teal-blue/10 disabled:bg-light-cyan"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
           placeholder={
-            conversationReady ? "Write a message..." : "Select a conversation"
+            conversationReady
+              ? "Write a message... (Shift+Enter for a new line)"
+              : "Select a conversation"
           }
           maxLength={4000}
           disabled={!conversationReady || isSending}
         />
         <button
-          className="shrink-0 rounded-xl bg-emerald-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-700/25 disabled:cursor-not-allowed disabled:bg-stone-300"
+          className="shrink-0 rounded-xl bg-deep-twilight px-4 py-3 text-sm font-semibold text-white transition hover:bg-bright-teal-blue focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-bright-teal-blue/25 disabled:cursor-not-allowed disabled:bg-frosted-blue"
           type="submit"
           disabled={!conversationReady || !draft.trim() || isSending}
         >

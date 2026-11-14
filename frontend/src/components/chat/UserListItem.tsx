@@ -15,17 +15,20 @@ export default function UserListItem({
 }: UserListItemProps) {
   return (
     <button
-      className={`w-full cursor-pointer border-b border-stone-100 px-4 py-3 text-left transition last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/40 disabled:cursor-not-allowed ${
+      className={`mb-1.5 flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40 disabled:cursor-not-allowed ${
         isSelected
-          ? "bg-emerald-50"
-          : "hover:bg-stone-50"
+          ? "bg-light-cyan/70 shadow-sm ring-1 ring-bright-teal-blue/25"
+          : "hover:-translate-y-0.5 hover:bg-light-cyan/40 hover:shadow-sm"
       }`}
       type="button"
       aria-pressed={isSelected}
       disabled={isLoading}
       onClick={onSelect}
     >
-      <span className="block truncate text-sm font-semibold text-stone-900">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-frosted-blue/60 text-sm font-semibold text-deep-twilight">
+        {user.name.slice(0, 1).toUpperCase() || "?"}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-deep-twilight">
         {isLoading ? "Starting chat..." : user.name}
       </span>
     </button>

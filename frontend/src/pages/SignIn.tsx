@@ -17,12 +17,13 @@ import {
 } from "../schemas/auth.schema";
 
 const inputClassName =
-  "mt-2 block w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-emerald-700 focus:ring-4 focus:ring-emerald-700/10";
+  "mt-2 block w-full rounded-xl border border-frosted-blue bg-white px-4 py-3 text-sm text-deep-twilight outline-none transition placeholder:text-bright-teal-blue focus:border-bright-teal-blue focus:ring-4 focus:ring-bright-teal-blue/10";
 
 export default function SignIn() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const [serverError, setServerError] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const {
     register,
     handleSubmit,
@@ -71,24 +72,21 @@ export default function SignIn() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f6f5f2] px-4 py-10 text-stone-900">
-      <section className="w-full max-w-md rounded-3xl border border-stone-200/80 bg-white p-7 shadow-[0_24px_70px_-35px_rgba(41,37,36,0.28)] sm:p-10">
+    <main className="auth-grainy-background flex min-h-screen items-center justify-center px-4 py-10 text-deep-twilight">
+      <section className="w-full max-w-md rounded-3xl border border-frosted-blue/80 bg-white p-7 shadow-[0_24px_70px_-35px_rgba(3,4,94,0.38)] sm:p-10">
         <div className="mb-8">
-          <div className="mb-7 flex size-11 items-center justify-center rounded-2xl bg-emerald-900 text-lg font-bold text-white">
-            E
-          </div>
-          <p className="mb-2 text-sm font-semibold tracking-wide text-emerald-800">
+          <p className="mb-2 text-sm font-semibold tracking-wide text-bright-teal-blue">
             WELCOME BACK
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Sign in to Ember</h1>
-          <p className="mt-2 text-sm leading-6 text-stone-500">
+          <h1 className="text-3xl font-semibold tracking-tight">Sign in to Chat App</h1>
+          <p className="mt-2 text-sm leading-6 text-bright-teal-blue">
             Pick up where you left off.
           </p>
         </div>
 
         <form className="space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
           <div>
-            <label className="text-sm font-medium text-stone-700" htmlFor="email">
+            <label className="text-sm font-medium text-deep-twilight" htmlFor="email">
               Email address
             </label>
             <input
@@ -109,19 +107,53 @@ export default function SignIn() {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-stone-700" htmlFor="password">
+            <label className="text-sm font-medium text-deep-twilight" htmlFor="password">
               Password
             </label>
-            <input
-              {...register("password")}
-              autoComplete="current-password"
-              className={inputClassName}
-              id="password"
-              type="password"
-              aria-invalid={Boolean(errors.password)}
-              aria-describedby={errors.password ? "password-error" : undefined}
-              placeholder="Your password"
-            />
+            <div className="relative">
+              <input
+                {...register("password")}
+                autoComplete="current-password"
+                className={`${inputClassName} pr-12`}
+                id="password"
+                type={isPasswordVisible ? "text" : "password"}
+                aria-invalid={Boolean(errors.password)}
+                aria-describedby={errors.password ? "password-error" : undefined}
+                placeholder="Your password"
+              />
+              <button
+                className="absolute inset-y-0 right-2 flex w-10 items-center justify-center rounded-lg text-bright-teal-blue hover:text-deep-twilight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bright-teal-blue/40"
+                type="button"
+                aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+                aria-pressed={isPasswordVisible}
+                onClick={() => setIsPasswordVisible((visible) => !visible)}
+              >
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {isPasswordVisible ? (
+                    <>
+                      <path d="M3 3l18 18" />
+                      <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+                      <path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5 0 8.5 4 9.5 7-.4 1.2-1.2 2.3-2.2 3.3" />
+                      <path d="M6.2 6.2C4.3 7.4 3 9.1 2.5 12c.5 2 3.7 7 9.5 7 1.2 0 2.3-.2 3.3-.6" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M2.5 12s3.2-7 9.5-7 9.5 7 9.5 7-3.2 7-9.5 7-9.5-7-9.5-7Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            </div>
             {errors.password && (
               <p className="mt-1.5 text-sm text-red-700" id="password-error" role="alert">
                 {errors.password.message}
@@ -136,7 +168,7 @@ export default function SignIn() {
           )}
 
           <button
-            className="w-full rounded-xl bg-emerald-900 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-700/25 disabled:cursor-not-allowed disabled:bg-stone-300"
+            className="w-full rounded-xl bg-deep-twilight px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-bright-teal-blue focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-bright-teal-blue/25 disabled:cursor-not-allowed disabled:bg-frosted-blue"
             type="submit"
             disabled={!isValid || isSubmitting}
           >
@@ -144,9 +176,9 @@ export default function SignIn() {
           </button>
         </form>
 
-        <p className="mt-7 text-center text-sm text-stone-500">
+        <p className="mt-7 text-center text-sm text-bright-teal-blue">
           Don&apos;t have an account?{" "}
-          <Link className="font-semibold text-emerald-900 hover:underline" to="/signup">
+          <Link className="font-semibold text-deep-twilight hover:underline" to="/signup">
             Sign up
           </Link>
         </p>

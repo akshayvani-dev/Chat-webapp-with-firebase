@@ -7,7 +7,7 @@ export default function Dashboard() {
 
   return (
     <RecentConversationsProvider>
-      <main className="flex h-dvh min-h-[420px] overflow-hidden bg-stone-50 text-stone-900">
+      <main className="flex h-dvh min-h-[420px] overflow-hidden bg-light-cyan text-deep-twilight">
         <Sidebar
           className={`w-full shrink-0 md:w-80 ${
             hasSelectedChat ? "hidden md:flex" : "flex"
