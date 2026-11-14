@@ -58,3 +58,27 @@ export async function sendMessage(
   );
   return response.data.message;
 }
+
+export async function editMessage(
+  conversationId: string,
+  messageId: string,
+  text: string,
+): Promise<ConversationMessage> {
+  const response = await axiosInstance.put<{ message: ConversationMessage }>(
+    `/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`,
+    { text },
+  );
+  return response.data.message;
+}
+
+export async function deleteMessage(
+  conversationId: string,
+  messageId: string,
+): Promise<ConversationMessage | null> {
+  const response = await axiosInstance.delete<{
+    lastMessage: ConversationMessage | null;
+  }>(
+    `/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`,
+  );
+  return response.data.lastMessage;
+}

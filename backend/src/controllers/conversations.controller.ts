@@ -1,7 +1,11 @@
 import type { RequestHandler } from "express";
 import { z } from "zod";
 import { AppError } from "../utils/AppError.js";
-import { sendConversationMessage } from "../services/firebase-chat.service.js";
+import {
+  deleteConversationMessage,
+  editConversationMessage,
+  sendConversationMessage,
+} from "../services/firebase-chat.service.js";
 import * as usersService from "../services/users.service.js";
 import * as conversationsService from "../services/conversations.service.js";
 
@@ -92,6 +96,56 @@ export const sendMessage: RequestHandler = async (req, res, next) => {
       parsedBody.data.text,
     );
     res.status(201).json({ message });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const editMessage: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+
+    const parsedBody = messageSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      throw new AppError(400, "Message must contain 1 to 4000 characters");
+    }
+
+    const { id: conversationId, messageId } = req.params;
+    if (typeof conversationId !== "string" || typeof messageId !== "string") {
+      throw new AppError(404, "Message not found");
+    }
+
+    const message = await editConversationMessage(
+      req.user.id,
+      conversationId,
+      messageId,
+      parsedBody.data.text,
+    );
+    res.status(200).json({ message });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteMessage: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "Unauthorized");
+    }
+
+    const { id: conversationId, messageId } = req.params;
+    if (typeof conversationId !== "string" || typeof messageId !== "string") {
+      throw new AppError(404, "Message not found");
+    }
+
+    const lastMessage = await deleteConversationMessage(
+      req.user.id,
+      conversationId,
+      messageId,
+    );
+    res.status(200).json({ lastMessage });
   } catch (error) {
     next(error);
   }

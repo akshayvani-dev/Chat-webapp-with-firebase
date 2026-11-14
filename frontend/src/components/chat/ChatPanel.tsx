@@ -5,12 +5,19 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getErrorMessage } from "../../apis/axiosInstance";
-import { getUserById, sendMessage } from "../../apis/users.api";
+import {
+  deleteMessage,
+  editMessage,
+  getUserById,
+  sendMessage,
+} from "../../apis/users.api";
 import { subscribeToConversationMessages } from "../../config/firebase-chat";
 import { useRecentConversations } from "./RecentConversationsContext";
 import { useAppSelector } from "../../store/hooks";
+import ConfirmDialog from "../ui/ConfirmDialog";
 import type {
   ConversationMessage,
   DirectoryUser,
@@ -38,11 +45,17 @@ export default function ChatPanel() {
   const [messageError, setMessageError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [isUpdatingMessage, setIsUpdatingMessage] = useState(false);
+  const [messageToDelete, setMessageToDelete] =
+    useState<ConversationMessage | null>(null);
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false);
   const sendingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const updateRecentPreview = useCallback(
-    (message: ConversationMessage) => {
+    (message: ConversationMessage | null) => {
       if (!user?.conversationId) {
         return;
       }
@@ -51,8 +64,8 @@ export default function ChatPanel() {
         conversationId: user.conversationId,
         userId: user.id,
         name: user.name,
-        lastMessage: message.text,
-        lastMessageAt: message.createdAt,
+        lastMessage: message?.text ?? null,
+        lastMessageAt: message?.createdAt ?? null,
       });
     },
     [updateRecentConversation, user],
@@ -77,6 +90,9 @@ export default function ChatPanel() {
       setMessages([]);
       setMessageError(null);
       setDraft("");
+      setEditingMessageId(null);
+      setEditDraft("");
+      setMessageToDelete(null);
 
       try {
         const result = await getUserById(id);
@@ -141,9 +157,7 @@ export default function ChatPanel() {
       (nextMessages) => {
         setMessages(nextMessages);
         const latestMessage = nextMessages[nextMessages.length - 1];
-        if (latestMessage) {
-          updateRecentPreview(latestMessage);
-        }
+        updateRecentPreview(latestMessage ?? null);
         setIsLoadingMessages(false);
         setMessageError(null);
       },
@@ -194,6 +208,68 @@ export default function ChatPanel() {
     } finally {
       sendingRef.current = false;
       setIsSending(false);
+    }
+  };
+
+  const handleSaveEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = editDraft.trim();
+    const conversationId = user?.conversationId;
+    const messageId = editingMessageId;
+    if (!text || !conversationId || !messageId || isUpdatingMessage) {
+      return;
+    }
+
+    setIsUpdatingMessage(true);
+    setMessageError(null);
+    try {
+      const updatedMessage = await editMessage(
+        conversationId,
+        messageId,
+        text,
+      );
+      setMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === updatedMessage.id ? updatedMessage : message,
+        ),
+      );
+      if (messages[messages.length - 1]?.id === updatedMessage.id) {
+        updateRecentPreview(updatedMessage);
+      }
+      setEditingMessageId(null);
+      setEditDraft("");
+    } catch (error) {
+      setMessageError(getErrorText(error));
+    } finally {
+      setIsUpdatingMessage(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const message = messageToDelete;
+    const conversationId = user?.conversationId;
+    if (!message || !conversationId || isDeletingMessage) {
+      return;
+    }
+
+    setIsDeletingMessage(true);
+    setMessageError(null);
+    try {
+      const latestMessage = await deleteMessage(conversationId, message.id);
+      setMessages((currentMessages) =>
+        currentMessages.filter((currentMessage) => currentMessage.id !== message.id),
+      );
+      updateRecentPreview(latestMessage);
+      if (editingMessageId === message.id) {
+        setEditingMessageId(null);
+        setEditDraft("");
+      }
+      setMessageToDelete(null);
+    } catch (error) {
+      setMessageError(getErrorText(error));
+      throw error;
+    } finally {
+      setIsDeletingMessage(false);
     }
   };
 
@@ -271,69 +347,93 @@ export default function ChatPanel() {
                 className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm ${
+                  className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm shadow-lg transition-shadow sm:max-w-[75%] ${
                     isOwnMessage
-                      ? "bg-deep-twilight text-white"
-                      : "bg-white text-deep-twilight shadow-sm"
+                      ? "rounded-br-md border border-white/15 bg-deep-twilight text-white shadow-deep-twilight/15"
+                      : "rounded-bl-md border border-frosted-blue/70 bg-white text-deep-twilight shadow-deep-twilight/10"
                   }`}
                 >
-                  <p>{message.text}</p>
-                  <time
-                    className={`mt-1 block text-right text-[11px] ${
-                      isOwnMessage ? "text-frosted-blue" : "text-bright-teal-blue"
-                    }`}
-                    dateTime={message.createdAt}
-                  >
-                    {new Date(message.createdAt).toLocaleTimeString([], {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </time>
-                  {isOwnMessage && (
-                    <div className="mt-2 flex justify-end gap-1">
-                      <button
-                        className="cursor-pointer rounded-md p-1 text-frosted-blue transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70"
-                        type="button"
-                        aria-label="Edit message"
-                        title="Edit message"
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                  {editingMessageId === message.id ? (
+                    <form className="min-w-56 space-y-2" onSubmit={handleSaveEdit}>
+                      <textarea
+                        className="max-h-40 min-h-16 w-full resize-y rounded-lg border border-light-cyan/40 bg-white/10 px-2.5 py-2 text-sm text-white outline-none placeholder:text-frosted-blue/70 focus:border-light-cyan focus:ring-2 focus:ring-light-cyan/30"
+                        value={editDraft}
+                        onChange={(event) => setEditDraft(event.target.value)}
+                        maxLength={4000}
+                        aria-label="Edit message text"
+                        autoFocus
+                      />
+                      <div className="flex justify-end gap-1">
+                        <button
+                          className="cursor-pointer rounded-md p-1 text-frosted-blue transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          aria-label="Cancel edit"
+                          title="Cancel edit"
+                          disabled={isUpdatingMessage}
+                          onClick={() => {
+                            setEditingMessageId(null);
+                            setEditDraft("");
+                          }}
                         >
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
-                        </svg>
-                      </button>
-                      <button
-                        className="cursor-pointer rounded-md p-1 text-frosted-blue transition-colors hover:bg-red-500/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70"
-                        type="button"
-                        aria-label="Delete message"
-                        title="Delete message"
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                          <X className="size-4" aria-hidden="true" />
+                        </button>
+                        <button
+                          className="cursor-pointer rounded-md p-1 text-frosted-blue transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="submit"
+                          aria-label="Save edit"
+                          title="Save edit"
+                          disabled={!editDraft.trim() || isUpdatingMessage}
                         >
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4h8v2" />
-                          <path d="m19 6-1 14H6L5 6" />
-                          <path d="M10 11v5M14 11v5" />
-                        </svg>
-                      </button>
-                    </div>
+                          <Check className="size-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <p>{message.text}</p>
+                      <time
+                        className={`mt-1 block text-right text-[11px] ${
+                          isOwnMessage
+                            ? "text-frosted-blue"
+                            : "text-bright-teal-blue"
+                        }`}
+                        dateTime={message.createdAt}
+                      >
+                        {new Date(message.createdAt).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                        {message.editedAt ? " · edited" : ""}
+                      </time>
+                      {isOwnMessage && (
+                        <div className="mt-2 flex justify-end gap-1">
+                          <button
+                            className="cursor-pointer rounded-md p-1 text-frosted-blue transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70 disabled:cursor-not-allowed disabled:opacity-50"
+                            type="button"
+                            aria-label="Edit message"
+                            title="Edit message"
+                            disabled={isUpdatingMessage || isDeletingMessage}
+                            onClick={() => {
+                              setEditingMessageId(message.id);
+                              setEditDraft(message.text);
+                              setMessageError(null);
+                            }}
+                          >
+                            <Pencil className="size-4" aria-hidden="true" />
+                          </button>
+                          <button
+                            className="cursor-pointer rounded-md p-1 text-frosted-blue transition-colors hover:bg-red-500/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-light-cyan/70 disabled:cursor-not-allowed disabled:opacity-50"
+                            type="button"
+                            aria-label="Delete message"
+                            title="Delete message"
+                            disabled={isUpdatingMessage || isDeletingMessage}
+                            onClick={() => setMessageToDelete(message)}
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </article>
@@ -386,6 +486,20 @@ export default function ChatPanel() {
           {isSending ? "Sending..." : "Send"}
         </button>
       </form>
+      <ConfirmDialog
+        open={messageToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingMessage) {
+            setMessageToDelete(null);
+          }
+        }}
+        title="Delete message?"
+        description="This message will be removed for everyone in this conversation."
+        confirmLabel="Delete message"
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeletingMessage}
+        variant="danger"
+      />
     </section>
   );
 }

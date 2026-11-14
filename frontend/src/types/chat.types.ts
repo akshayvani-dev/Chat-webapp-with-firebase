@@ -9,6 +9,7 @@ export type ConversationMessage = {
   text: string;
   senderId: string;
   createdAt: string;
+  editedAt?: string;
 };
 
 export type ListedUser = {

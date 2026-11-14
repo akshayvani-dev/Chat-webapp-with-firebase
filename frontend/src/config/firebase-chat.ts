@@ -62,6 +62,9 @@ export function subscribeToConversationMessages(
                 text: data.text,
                 senderId: data.senderId,
                 createdAt: data.createdAt.toDate().toISOString(),
+                ...(data.editedAt instanceof Timestamp
+                  ? { editedAt: data.editedAt.toDate().toISOString() }
+                  : {}),
               };
             });
             onMessages(messages);
